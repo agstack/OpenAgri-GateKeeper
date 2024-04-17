@@ -1,0 +1,58 @@
+version: '3.10'
+
+services:
+  # Django application
+  web:
+    container_name: django_gatekeeper
+    environment:
+      - MAINTENANCE_MODE=OFF
+    build: .
+    env_file: # specify the file containing environment variables
+      - .env
+    volumes:
+      - .:/var/www
+      - asset_volume:/var/www/assets
+    ports:
+      - "8000:8080"
+    networks:
+      - shared_network_gatekeeper
+
+  # Nginx
+  nginx:
+    container_name: nginx_gatekeeper
+    image: nginx:1.19
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx:/etc/nginx/conf.d
+      - ./nginx/certs:/etc/nginx/certs  # Mount the local certs directory
+      - asset_volume:/usr/share/nginx/html/assets
+    depends_on:
+      - web
+    networks:
+      - shared_network_gatekeeper
+
+volumes:
+  asset_volume:
+
+networks:
+  shared_network_gatekeeper:
+    external: true
+    driver: bridge
+
+
+
+# Explanation of above configuration related to ports
+
+# Reverse Proxy: nginx acts as a reverse proxy. It listens for incoming HTTP requests and forwards them to
+# the appropriate service—your Django app in this case. This is specified by the proxy_pass http://web:8080; line in
+# nginx configuration.
+#
+# Performance and Caching: nginx is designed to handle static assets efficiently. By delegating the handling of static
+# assets to nginx, it frees up Django application to focus solely on application logic, thereby improving overall
+# performance.
+#
+# Security: Exposing just the nginx service, instead of Django application, adds an additional layer of security. The
+# reverse proxy can limit and control access, buffer and cache content, and even load-balance between multiple
+# instances of your Django app if needed.
+

@@ -3,3 +3,4 @@ django-allauth==0.61.1
 python-dotenv==1.0.1
 mysqlclient==2.2.4
 django-simple-history==3.5.0
+waitress==3.0.0
