@@ -10,3 +10,9 @@
 README.md
 .gitignore
 .gitlab-ci.yml
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.git
+*.hg
