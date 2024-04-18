@@ -25,11 +25,12 @@ RUN pip install --upgrade pip
 # Set the working directory to /var/www
 WORKDIR /var/www
 
+# Only copy the files necessary for the application to run
+COPY requirements.txt /var/www/
+RUN pip install -r requirements.txt --upgrade
+
 # Copy the current directory contents into the container at /var/www
 COPY . /var/www
-
-# Install and upgrade packages specified in requirements.txt
-RUN pip install -r requirements.txt --upgrade
 
 # Add the entrypoint script and set the execute permissions
 COPY runsetup.sh /usr/local/bin/

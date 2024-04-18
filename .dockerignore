@@ -1,9 +1,12 @@
-**/venv/
-.git
-.idea
+**/.venv/
+**/.git/
+**/.idea/
 **/__pycache__/
 **/assets/
 **/staticfiles/
+**/mysql_docker/
 
 .yarnrc.yml
 README.md
+.gitignore
+.gitlab-ci.yml

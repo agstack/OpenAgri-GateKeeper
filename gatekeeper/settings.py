@@ -1,7 +1,8 @@
 import os
-
 from pathlib import Path
 from dotenv import load_dotenv
+
+from django.contrib.messages import constants as messages
 
 load_dotenv()
 
@@ -127,11 +128,22 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# MESSAGE_TAGS setting maps Django's built-in message levels to CSS classes used by the front-end framework
+# (e.g., Bootstrap).
+# This allows messages from Django's messaging framework to be styled appropriately in the web interface.
+MESSAGE_TAGS = {
+    messages.DEBUG: "alert-info",
+    messages.INFO: "alert-info",
+    messages.SUCCESS: "alert-success",
+    messages.WARNING: "alert-warning",
+    messages.ERROR: "alert-danger",
+}
+
 
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'en-gn'
 
 TIME_ZONE = 'UTC'
 
@@ -140,14 +152,18 @@ USE_I18N = True
 USE_TZ = True
 
 
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/4.2/howto/static-files/
+# STATIC_URL is the URL to use when referring to static files (like CSS, JavaScript, and images) in templates.
+STATIC_URL = "/assets/"
 
-STATIC_URL = 'static/'
+# This setting defines the list of directories where Django will look for additional static files, in addition to
+# each app's static folder.
+STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
+
+# STATIC_ROOT is the directory where these static files will be collected when you run collectstatic.
+STATIC_ROOT = os.path.join(BASE_DIR, 'assets')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
-
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Custom user model replacing the default Django user model.

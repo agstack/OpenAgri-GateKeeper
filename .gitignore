@@ -1,8 +1,8 @@
 # Folders
-.git
+**/.git/
 **/__pycache__/
-venv*/
-.idea/
+**/.venv*/
+**/.idea/
 **/staticfiles/
 **/assets/
 
