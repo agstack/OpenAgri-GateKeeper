@@ -6,7 +6,7 @@ from aegis.views.api import login
 app_name = "aegis"
 
 urlpatterns = [
-    path('api/token/', login, name='token_obtain_pair'),
+    path('api/authenticate/', login, name='authenticate'),
 ]
 
 if settings.DEBUG:

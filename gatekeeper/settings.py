@@ -53,6 +53,8 @@ SITE_ID = 1
 
 
 MIDDLEWARE = [
+    'gatekeeper.custom_middleware.RequestLoggingMiddleware.RequestLoggingMiddleware',
+
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',

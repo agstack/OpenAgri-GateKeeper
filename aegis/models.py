@@ -3,8 +3,26 @@ import uuid
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.core.validators import RegexValidator
+from django.conf import settings
 
 from simple_history.models import HistoricalRecords
+
+
+class RequestLog(models.Model):
+    class Meta:
+        db_table = 'activity_log'
+        verbose_name = 'Activity Log'
+        verbose_name_plural = 'Activity Logs'
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    ip_address = models.CharField(max_length=45)
+    user_agent = models.TextField()
+    path = models.CharField(max_length=200)
+    query_string = models.TextField()
+    body = models.TextField()
+    method = models.CharField(max_length=10)
+    response_status = models.IntegerField()
+    timestamp = models.DateTimeField(auto_now_add=True)
 
 
 class DefaultAuthUserExtend(AbstractUser):
