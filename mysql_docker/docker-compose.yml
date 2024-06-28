@@ -3,7 +3,7 @@ version: '3.9'
 services:
   mysql_gatekeeper:
     build: .
-    restart: always
+    restart: no
     container_name: mysql_gatekeeper_container
     env_file:
       - .env
@@ -17,7 +17,7 @@ services:
   phpmyadmin_gatekeeper:
     image: phpmyadmin/phpmyadmin
     container_name: phpmyadmin_gatekeeper_container
-    restart: always
+    restart: no
     env_file:
       - .env
     ports:

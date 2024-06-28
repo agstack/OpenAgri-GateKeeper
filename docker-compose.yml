@@ -4,6 +4,7 @@ services:
   # Django application
   web:
     container_name: django_gatekeeper
+    restart: no
     environment:
       - MAINTENANCE_MODE=OFF
     build: .
