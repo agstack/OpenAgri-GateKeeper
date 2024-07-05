@@ -9,7 +9,6 @@ from aegis.models import DefaultAuthUserExtend
 
 logger = logging.getLogger('aegis')
 
-
 class WeatherDataTests(TestCase):
     def setUp(self):
         self.client = APIClient()

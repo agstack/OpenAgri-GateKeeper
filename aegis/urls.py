@@ -1,12 +1,12 @@
 from django.urls import path
 from django.conf import settings
 from django.conf.urls.static import static
-from aegis.views.api import login
+# from aegis.views.api import login
 
 app_name = "aegis"
 
 urlpatterns = [
-    path('api/authenticate/', login, name='authenticate'),
+    # path('api/authenticate/', login, name='authenticate'),
 ]
 
 if settings.DEBUG:

@@ -9,7 +9,6 @@ from aegis.models import DefaultAuthUserExtend
 
 logger = logging.getLogger('aegis')
 
-
 class FarmCalendarTests(TestCase):
     def setUp(self):
         self.client = APIClient()
