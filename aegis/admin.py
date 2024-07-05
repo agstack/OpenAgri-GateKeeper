@@ -1,34 +1,13 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 
-from allauth.account.models import EmailAddress, EmailConfirmation
-
 from .models import DefaultAuthUserExtend
 
 
 @admin.register(DefaultAuthUserExtend)
 class DefaultAuthUserExtendAdmin(UserAdmin):
     # Specify the fields to be displayed in the user list view within the admin panel.
-    list_display = ('email', 'first_name', 'last_name', 'uuid', 'is_active', 'date_joined', 'last_login',
-                    'is_email_verified', 'is_email_confirmed')
-
-    # Custom method to display whether the user's email is verified, based on the related EmailAddress entry.
-    def is_email_verified(self, obj):
-        return EmailAddress.objects.filter(user=obj, verified=True).exists()
-
-    is_email_verified.short_description = 'Email Verified'
-    is_email_verified.boolean = True
-
-    # Custom method to display whether an email confirmation has been sent for the user.
-    def is_email_confirmed(self, obj):
-        email_confirmation = EmailConfirmation.objects.filter(email_address__user=obj, sent__isnull=False).first()
-        if email_confirmation:
-            # Use Django's date formatting (same as last_login) utilities to present the date in a readable format
-            formatted_date = format(email_confirmation.sent, 'N j, Y, P')
-            return formatted_date
-        return 'Not sent'
-
-    is_email_confirmed.short_description = 'Email Confirmation Sent'
+    list_display = ('email', 'first_name', 'last_name', 'uuid', 'is_active', 'date_joined', 'last_login')
 
     # Specify fields that should have a searchable multiple selection interface in the admin form.
     filter_horizontal = ('user_permissions', 'groups')

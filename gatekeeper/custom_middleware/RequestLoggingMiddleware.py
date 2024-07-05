@@ -14,13 +14,16 @@ class RequestLoggingMiddleware:
         # Access the stored body
         body = getattr(request, 'logged_body', '')
 
+        # Ensure user_agent is never None
+        user_agent = request.META.get('HTTP_USER_AGENT', 'unknown')
+
         # Log request data
         response = self.get_response(request)
 
         RequestLog.objects.create(
             user=request.user if request.user.is_authenticated else None,
             ip_address=request.META.get('REMOTE_ADDR'),
-            user_agent=request.META.get('HTTP_USER_AGENT'),
+            user_agent=user_agent,
             path=request.path,
             query_string=request.META.get('QUERY_STRING'),
             body=body,
