@@ -21,7 +21,8 @@ SECRET_KEY = 'django-insecure-6s%ry4k3qqh0(tu8=3z35+vy7mh86_6u-1ce@by0fb5wqx_-^n
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+# ALLOWED_HOSTS = []
 
 # Application definition
 DEFAULT_APPS = [
@@ -38,6 +39,8 @@ LOCAL_APPS = [
 ]
 
 THIRD_PARTY_APPS = [
+    "crispy_forms",
+    "crispy_bootstrap4",
     'django.contrib.sites',
     'rest_framework',
     'oauth2_provider',
@@ -51,6 +54,13 @@ AUTHENTICATION_BACKENDS = (
 
 
 SITE_ID = 1
+
+CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap4"
+CRISPY_TEMPLATE_PACK = "bootstrap4"
+
+LOGIN_URL = "account_login"
+
+
 
 
 MIDDLEWARE = [
@@ -70,7 +80,7 @@ ROOT_URLCONF = 'gatekeeper.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        "DIRS": [os.path.join(BASE_DIR, "templates")],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -79,6 +89,8 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
             ],
+            # Controls whether the template system should be in debug mode.
+            "debug": True,
         },
     },
 ]
@@ -159,6 +171,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Custom user model replacing the default Django user model.
 AUTH_USER_MODEL = 'aegis.DefaultAuthUserExtend'
+
+DJANGO_PORT = os.getenv('DJANGO_PORT', '8001')
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
