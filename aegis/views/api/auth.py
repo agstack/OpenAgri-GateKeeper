@@ -19,50 +19,6 @@ from gatekeeper.forms import LoginForm, RegisterForm
 logger = logging.getLogger('aegis')
 
 
-@method_decorator(never_cache, name='dispatch')
-class LoginV(TemplateView):
-    template_name = "auth/login.html"
-
-    def get(self, request, *args, **kwargs):
-        logger.info("LoginV view accessed")
-        form = LoginForm()
-        context = self.get_context_data(**kwargs)
-        context['form'] = form
-        return render(request, self.template_name, context)
-
-    def post(self, request, *args, **kwargs):
-        form = LoginForm(request, data=request.POST)
-        if form.is_valid():
-            user = form.get_user()
-            auth_login(request, user)
-            return redirect('home')  # Redirect to a success page.
-        context = self.get_context_data(**kwargs)
-        context['form'] = form
-        return render(request, self.template_name, context)
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        return context
-
-
-@method_decorator(never_cache, name='dispatch')
-class RegisterView(TemplateView):
-    form_class = RegisterForm
-    template_name = 'auth/register.html'
-
-    def get(self, request):
-        form = self.form_class()
-        return render(request, self.template_name, {'form': form})
-
-    def post(self, request):
-        form = self.form_class(request.POST)
-        if form.is_valid():
-            user = form.save()
-            auth_login(request, user)
-            return redirect('home')
-        return render(request, self.template_name, {'form': form})
-
-
 class TokenObtainView(APIView):
     def post(self, request, *args, **kwargs):
         username = request.data.get('username')
