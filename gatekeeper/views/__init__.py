@@ -1,1 +1,1 @@
-from .AuthV import LoginView, RegisterView
+from .AuthV import LoginView, RegisterView, PasswordResetView
