@@ -21,7 +21,7 @@ urlpatterns = [
     path('api/weather_data/', WeatherDataView.as_view(), name='weather_data'),
 
     path('', LoginV.as_view(), name='home'),
-    path('login', LoginV.as_view(), name='login'),
+    path('login/', LoginV.as_view(), name='login'),
     path('register/', LoginV.as_view(), name='register'),
 ]
 

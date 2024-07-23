@@ -7,7 +7,7 @@ app_name = "aegis"
 
 urlpatterns = [
     # path('api/authenticate/', LoginV.as_view, name='authenticate'),
-    path('login/', LoginV.as_view(), name='login'),
+    # path('login/', LoginV.as_view(), name='login'),
 ]
 
 if settings.DEBUG:
