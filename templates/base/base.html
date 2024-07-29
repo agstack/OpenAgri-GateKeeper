@@ -1,0 +1,70 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <title>{% block title %}{% endblock title %} | Admin</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta content="" name="description" />
+    <meta content="" name="author" />
+    <!-- App favicon -->
+    <link rel="shortcut icon" href="{% static 'images/favicon.ico'%}">
+
+    {% block css %}
+    {% block extra_css %}
+    {% endblock extra_css %}
+    <!-- preloader css -->
+    <link rel="stylesheet" href="{% static 'css/preloader.min.css'%}" type="text/css" />
+
+    <!-- Bootstrap Css -->
+    <link href="{% static 'css/bootstrap.min.css'%}" id="bootstrap-style" rel="stylesheet" type="text/css" />
+    <!-- Icons Css -->
+    <link href="{% static 'css/icons.min.css'%}" rel="stylesheet" type="text/css" />
+    <!-- App Css-->
+    <link href="{% static 'css/app.min.css'%}" id="app-style" rel="stylesheet" type="text/css" />
+    {% endblock css %}
+
+    <meta name="csrf-token" content="{{ csrf_token }}">
+</head>
+
+<body {% block extra_body %} data-topbar="light" data-sidebar="light" data-layout-mode="light" {% endblock extra_body %}>
+    <!-- Begin page -->
+    <div id="layout-wrapper">
+        {% block header %}
+            {% include "base/header.html" %}
+        {% endblock header %}
+
+        {% block left_sidebar %}
+            {% include 'base/left-sidebar.html' %}
+        {% endblock left_sidebar %}
+
+
+        {% block content %}
+            {% block footer %}
+            {% endblock footer %}
+        {% endblock content %}
+    </div>
+    <!-- END layout-wrapper -->
+
+
+    {% block javascript %}
+        <!-- JAVASCRIPT -->
+        <script src="{% static 'libs/jquery/dist/jquery.min.js'%}"></script>
+        <script src="{% static 'libs/bootstrap/dist/js/bootstrap.bundle.min.js'%}"></script>
+        <script src="{% static 'libs/metismenu/dist/metisMenu.min.js'%}"></script>
+        <script src="{% static 'libs/simplebar/dist/simplebar.min.js'%}"></script>
+        <script src="{% static 'libs/node-waves/dist/waves.min.js'%}"></script>
+        <script src="{% static 'libs/feather-icons/dist/feather.min.js'%}"></script>
+        <!-- pace js -->
+        <script src="{% static 'libs/pace-js/pace.min.js'%}"></script>
+        {% block extra_js %}
+        {% endblock extra_js %}
+        <script src="{% static 'js/app.js' %}"></script>
+        <script>
+            document.cookie = "user_timezone=" + Intl.DateTimeFormat().resolvedOptions().timeZone + "; path=/";
+        </script>
+    {% endblock javascript %}
+</body>
+
+</html>

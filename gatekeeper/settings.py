@@ -58,9 +58,8 @@ SITE_ID = 1
 CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap4"
 CRISPY_TEMPLATE_PACK = "bootstrap4"
 
-LOGIN_URL = "account_login"
-
-
+LOGIN_URL = "login"
+LOGOUT_REDIRECT_URL = 'login'  # Redirect to the login page after logging out
 
 
 MIDDLEWARE = [

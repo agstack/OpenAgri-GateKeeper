@@ -1,0 +1,15 @@
+{% extends "base/base.html" %}
+
+{% block extra_head %}
+  <input type="hidden" id="session-cookie-age" value="{{ session_cookie_age }}">
+{% endblock %}
+
+{% block extra_content %}
+  <div id="warning-message" style="display: none;">
+    <p>You have less than 5 minutes remaining in your session. Please stay active, or you will be logged out automatically.</p>
+  </div>
+{% endblock %}
+
+{% block extra_scripts %}
+  <script src="{% static 'session_timeout.js' %}"></script>
+{% endblock %}

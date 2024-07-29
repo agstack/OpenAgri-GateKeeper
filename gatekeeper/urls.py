@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from django.contrib.auth.views import LogoutView
 
 from .views import LoginView, RegisterView, PasswordResetView
 
@@ -18,8 +19,9 @@ urlpatterns = [
     # path('api/farm_calendar/', FarmCalendarView.as_view(), name='farm_calendar'),
     # path('api/weather_data/', WeatherDataView.as_view(), name='weather_data'),
 
-    path('', LoginView.as_view(), name='home'),
+    # path('', LoginView.as_view(), name='home'),
     path('login/', LoginView.as_view(), name='login'),
+    path('logout/', LogoutView.as_view(next_page='login'), name='logout'),
     path('register/', RegisterView.as_view(), name='register'),
     path('reset_password/', PasswordResetView.as_view(), name='reset_password'),
 

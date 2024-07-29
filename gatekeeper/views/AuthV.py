@@ -1,8 +1,9 @@
 from django.views.generic import TemplateView
-from django.contrib.auth import login as auth_login
+from django.contrib.auth import login as auth_login, logout as auth_logout
 from django.views.decorators.cache import never_cache
 from django.utils.decorators import method_decorator
 from django.shortcuts import render, redirect
+from django.urls import reverse, resolve, Resolver404
 import logging
 
 from gatekeeper.forms import LoginForm, RegisterForm, PasswordResetForm
@@ -16,25 +17,54 @@ class LoginView(TemplateView):
     template_name = "auth/login.html"
 
     def get(self, request, *args, **kwargs):
+        if request.user.is_authenticated:
+            next_url = request.session.get('next', '')
+            if next_url:
+                return redirect(next_url)
+            return redirect('aegis:dashboard')
+
+        next_url = request.GET.get('next', '')
+        if next_url:
+            request.session['next'] = next_url
+
         logger.info("Login view accessed")
-        form = LoginForm()
+        form = LoginForm(initial={'next': next_url})
         context = self.get_context_data(**kwargs)
         context['form'] = form
         return render(request, self.template_name, context)
 
     def post(self, request, *args, **kwargs):
         form = LoginForm(request, data=request.POST)
+        next_url = request.session.get('next', '')
         if form.is_valid():
             user = form.get_user()
             auth_login(request, user)
-            return redirect('home')  # Redirect to a success page.
+            if next_url:
+                del request.session['next']  # Clear the next URL from session after successful login
+                if self.is_valid_url(next_url):
+                    return redirect(next_url)
+                elif 'farm_calendar' in next_url:
+                    return redirect('http://127.0.0.1:8002')
+            return redirect('aegis:dashboard')
         context = self.get_context_data(**kwargs)
         context['form'] = form
+        context['next'] = next_url
         return render(request, self.template_name, context)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         return context
+
+    def is_valid_url(self, url):
+        """
+        Check if the URL is valid and can be resolved to a view.
+        """
+        try:
+            resolve(url)
+            return True
+        except Resolver404:
+            return False
+
 
 @method_decorator(never_cache, name='dispatch')
 class RegisterView(TemplateView):
@@ -60,6 +90,7 @@ class RegisterView(TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         return context
+
 
 @method_decorator(never_cache, name='dispatch')
 class PasswordResetView(TemplateView):
@@ -90,3 +121,4 @@ class PasswordResetView(TemplateView):
         context = self.get_context_data(**kwargs)
         context['form'] = form
         return render(request, self.template_name, context)
+
