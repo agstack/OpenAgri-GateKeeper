@@ -21,10 +21,6 @@ ACCESS_TOKEN_SECRET = os.getenv('ACCESS_TOKEN_SECRET', 'default_access_token_sec
 REFRESH_TOKEN_SECRET = os.getenv('REFRESH_TOKEN_SECRET', 'default_refresh_token_secret')
 JWT_SECRET = os.getenv('JWT_SECRET', 'default_jwt_secret')
 
-print("ACCESS_TOKEN_SECRET:", ACCESS_TOKEN_SECRET)
-print("REFRESH_TOKEN_SECRET:", REFRESH_TOKEN_SECRET)
-print("JWT_SECRET:", JWT_SECRET)
-
 # Token expiration times
 ACCESS_TOKEN_EXPIRATION = timedelta(minutes=60)
 REFRESH_TOKEN_EXPIRATION = timedelta(days=1)
