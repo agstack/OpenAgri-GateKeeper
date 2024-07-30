@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 from datetime import timedelta
+import dj_database_url
 
 from django.contrib.messages import constants as messages
 
@@ -100,15 +101,14 @@ WSGI_APPLICATION = 'gatekeeper.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
+# quick workaround for now to using other databases other than mysql
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': os.getenv("MYSQL_DB"),
-        'USER': os.getenv("MYSQL_USER"),
-        'PASSWORD': os.getenv("MYSQL_PASS"),
-        'HOST': os.getenv("MYSQL_HOST"),
-        'PORT': os.getenv("MYSQL_PORT"),
-    },
+    'default': dj_database_url.config(
+        default=(
+            f'mysql://{os.getenv("DB_USER")}:{os.getenv("DB_PASS")}@'
+            f'{os.getenv("DB_HOST")}:{os.getenv("DB_PORT")}/{os.getenv("DB_NAME")}'
+        )
+    )
 }
 
 
