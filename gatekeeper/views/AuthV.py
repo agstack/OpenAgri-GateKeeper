@@ -59,11 +59,6 @@ class LoginView(TemplateView):
             access_token = self.generate_token(user.id, ACCESS_TOKEN_SECRET, ACCESS_TOKEN_EXPIRATION)
             refresh_token = self.generate_token(user.id, REFRESH_TOKEN_SECRET, REFRESH_TOKEN_EXPIRATION)
             jwt_token = self.generate_token(user.id, JWT_SECRET, JWT_EXPIRATION)
-
-            print(access_token)
-            print(refresh_token)
-            print(jwt_token)
-
             # Create response
             if 'farm_calendar' in next_url:
                 response = HttpResponseRedirect('http://127.0.0.1:8002/test_perm')
