@@ -12,4 +12,5 @@ requests-mock==1.12.1
 crispy-bootstrap4==2024.1
 django-crispy-forms==2.1
 dj-database-url==2.2.0
+psycopg2==2.9.9
 requests==2.32.2
