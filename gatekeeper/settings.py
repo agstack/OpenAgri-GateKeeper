@@ -177,18 +177,22 @@ DJANGO_PORT = os.getenv('DJANGO_PORT', '8001')
 JWT_SIGNING_KEY = get_env_var('JWT_SIGNING_KEY')
 
 
+# geting from env var from now, but in the future this infos should
+# come with the service registration post request
 AVAILABLE_SERVICES = {
     'FarmCalendar':
     {
-        'api': 'http://127.0.0.1:8002/api/',
-        'post_auth': 'http://127.0.0.1:8002/post_auth'
+
+        'api': os.getenv('FARM_CALENDAR_API', 'http://127.0.0.1:8002/api/'),
+        'post_auth': os.getenv('FARM_CALENDAR_POST_AUTH', 'http://127.0.0.1:8002/post_auth')
     },
     'WeatherService': {
         'api': 'http://external_weather/api/',
         'post_auth': None,
     },
 }
-
+# same with this data, also cames in the service announcement
+# in the service registration endpoint
 REVERSE_PROXY_MAPPING = {
     'FarmAssets': 'FarmCalendar',
     'FarmPlants': 'FarmCalendar',
