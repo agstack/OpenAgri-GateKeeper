@@ -2,8 +2,10 @@ import jwt
 import logging
 import os
 from datetime import datetime, timedelta
+from urllib.parse import urlencode
 
 from django.views.generic import TemplateView
+from django.conf import settings
 from django.contrib.auth import login as auth_login, logout as auth_logout
 from django.views.decorators.cache import never_cache
 from django.utils.decorators import method_decorator
@@ -19,7 +21,6 @@ logger = logging.getLogger('aegis')
 # Secret keys for JWT encoding
 ACCESS_TOKEN_SECRET = os.getenv('ACCESS_TOKEN_SECRET', 'default_access_token_secret')
 REFRESH_TOKEN_SECRET = os.getenv('REFRESH_TOKEN_SECRET', 'default_refresh_token_secret')
-JWT_SECRET = os.getenv('JWT_SECRET', 'default_jwt_secret')
 
 # Token expiration times
 ACCESS_TOKEN_EXPIRATION = timedelta(minutes=60)
@@ -56,24 +57,27 @@ class LoginView(TemplateView):
             auth_login(request, user)
 
             # Generate tokens
-            access_token = self.generate_token(user.id, ACCESS_TOKEN_SECRET, ACCESS_TOKEN_EXPIRATION)
-            refresh_token = self.generate_token(user.id, REFRESH_TOKEN_SECRET, REFRESH_TOKEN_EXPIRATION)
-            jwt_token = self.generate_token(user.id, JWT_SECRET, JWT_EXPIRATION)
-            # Create response
-            if 'farm_calendar' in next_url:
-                response = HttpResponseRedirect('http://127.0.0.1:8002/test_perm')
+            jwt_token = self.generate_token(user.id, settings.JWT_SIGNING_KEY, JWT_EXPIRATION)
+
+            service_post_auth_url = settings.AVAILABLE_SERVICES.get(next_url, {}).get('post_auth')
+            # redirect to external service if it's
+            # registered with a post_auth url in the available services
+            if service_post_auth_url is not None:
+                query_params = {'auth_token': jwt_token}
+                encoded_params = urlencode(query_params)
+                redirect_url = f'{service_post_auth_url}?{encoded_params}'
+                response = HttpResponseRedirect(redirect_url)
             else:
                 response = HttpResponseRedirect(next_url or 'aegis:dashboard')
 
             # Set cookies
-            response.set_cookie('access_token', access_token, httponly=True)
-            response.set_cookie('refresh_token', refresh_token, httponly=True)
-            response.set_cookie('jwt', jwt_token, httponly=True)
+            # response.set_cookie('access_token', access_token)
+            # response.set_cookie('refresh_token', refresh_token, httponly=True)
+            # response.set_cookie('jwt', jwt_token)
 
             # Clear the next URL from session after successful login
             if next_url:
                 del request.session['next']
-
             return response
         context = self.get_context_data(**kwargs)
         context['form'] = form
