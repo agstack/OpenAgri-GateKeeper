@@ -20,6 +20,7 @@ RUN apt-get update && \
     git \
     iputils-ping \
     net-tools \
+    libpq-dev \
     dnsutils \
     build-essential \
     default-mysql-client \
