@@ -182,9 +182,8 @@ JWT_SIGNING_KEY = get_env_var('JWT_SIGNING_KEY')
 AVAILABLE_SERVICES = {
     'FarmCalendar':
     {
-
         'api': os.getenv('FARM_CALENDAR_API', 'http://127.0.0.1:8002/api/'),
-        'post_auth': os.getenv('FARM_CALENDAR_POST_AUTH', 'http://127.0.0.1:8002/post_auth')
+        'post_auth': os.getenv('FARM_CALENDAR_POST_AUTH', 'http://127.0.0.1:8002/post_auth/')
     },
     'WeatherService': {
         'api': 'http://external_weather/api/',
@@ -194,6 +193,8 @@ AVAILABLE_SERVICES = {
 # same with this data, also cames in the service announcement
 # in the service registration endpoint
 REVERSE_PROXY_MAPPING = {
+    'FarmActivities': 'FarmCalendar',
+    'FarmActivityTypes': 'FarmCalendar',
     'FarmAssets': 'FarmCalendar',
     'FarmPlants': 'FarmCalendar',
     'WeeklyWeatherForecast': 'WeatherService',
