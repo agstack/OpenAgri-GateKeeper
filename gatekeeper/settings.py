@@ -46,6 +46,7 @@ THIRD_PARTY_APPS = [
     "crispy_bootstrap4",
     'django.contrib.sites',
     'rest_framework',
+    'drf_yasg',
     'oauth2_provider',
 ]
 
