@@ -18,11 +18,15 @@ if not os.path.exists(LOG_DIR):
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-6s%ry4k3qqh0(tu8=3z35+vy7mh86_6u-1ce@by0fb5wqx_-^n'
 
+JWT_SIGNING_KEY = os.environ.get('JWT_SIGNING_KEY')
+JWT_ALG = os.environ.get('JWT_ALG')
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
 ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
-# ALLOWED_HOSTS = []
+
+APPEND_SLASH = True
 
 # Application definition
 DEFAULT_APPS = [
@@ -59,7 +63,8 @@ SITE_ID = 1
 CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap4"
 CRISPY_TEMPLATE_PACK = "bootstrap4"
 
-LOGIN_URL = "login"
+LOGIN_URL = "login/"
+LOGOIN_REDIRECT_URL = 'aegis/dashboard/'  # Redirect to the login page
 LOGOUT_REDIRECT_URL = 'login'  # Redirect to the login page after logging out
 
 

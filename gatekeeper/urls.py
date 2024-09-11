@@ -10,6 +10,7 @@ from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 
 from .views import LoginView, RegisterView, PasswordResetView
+from aegis.views.api import FarmCalendarView, WeatherDataView
 
 
 schema_view = get_schema_view(
@@ -39,8 +40,8 @@ urlpatterns = [
     # path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     # path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
-    # path('api/farm_calendar/', FarmCalendarView.as_view(), name='farm_calendar'),
-    # path('api/weather_data/', WeatherDataView.as_view(), name='weather_data'),
+    path('api/farm_calendar/', FarmCalendarView.as_view(), name='farm_calendar'),
+    path('api/weather_data/', WeatherDataView.as_view(), name='weather_data'),
 
     # path('', LoginView.as_view(), name='home'),
     path('login/', LoginView.as_view(), name='login'),
