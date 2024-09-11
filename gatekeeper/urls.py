@@ -19,7 +19,7 @@ schema_view = get_schema_view(
         description="Test description",
         # terms_of_service="https://www.google.com/policies/terms/",
         contact=openapi.Contact(email="p.bapat@maastrichtuniversity.nl"),
-        license=openapi.License(name="BSD License"),
+        license=openapi.License(name="EUPLv1.2 License"),
     ),
     public=True,
     permission_classes=[permissions.AllowAny],
