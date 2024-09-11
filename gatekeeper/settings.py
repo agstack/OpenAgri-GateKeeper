@@ -2,8 +2,11 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 from datetime import timedelta
+import dj_database_url
 
 from django.contrib.messages import constants as messages
+
+from .env_helpers import get_env_var
 
 load_dotenv()
 
@@ -16,7 +19,7 @@ if not os.path.exists(LOG_DIR):
     os.makedirs(LOG_DIR)
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-6s%ry4k3qqh0(tu8=3z35+vy7mh86_6u-1ce@by0fb5wqx_-^n'
+SECRET_KEY = get_env_var('DJANGO_SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -101,15 +104,14 @@ WSGI_APPLICATION = 'gatekeeper.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
+# quick workaround for now to using other databases other than mysql
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': os.getenv("MYSQL_DB"),
-        'USER': os.getenv("MYSQL_USER"),
-        'PASSWORD': os.getenv("MYSQL_PASS"),
-        'HOST': os.getenv("MYSQL_HOST"),
-        'PORT': os.getenv("MYSQL_PORT"),
-    },
+    'default': dj_database_url.config(
+        default=(
+            f'mysql://{os.getenv("DB_USER")}:{os.getenv("DB_PASS")}@'
+            f'{os.getenv("DB_HOST")}:{os.getenv("DB_PORT")}/{os.getenv("DB_NAME")}'
+        )
+    )
 }
 
 
@@ -173,6 +175,32 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'aegis.DefaultAuthUserExtend'
 
 DJANGO_PORT = os.getenv('DJANGO_PORT', '8001')
+JWT_SIGNING_KEY = get_env_var('JWT_SIGNING_KEY')
+
+
+# geting from env var from now, but in the future this infos should
+# come with the service registration post request
+AVAILABLE_SERVICES = {
+    'FarmCalendar':
+    {
+        'api': os.getenv('FARM_CALENDAR_API', 'http://127.0.0.1:8002/api/'),
+        'post_auth': os.getenv('FARM_CALENDAR_POST_AUTH', 'http://127.0.0.1:8002/post_auth/')
+    },
+    'WeatherService': {
+        'api': 'http://external_weather/api/',
+        'post_auth': None,
+    },
+}
+# same with this data, also cames in the service announcement
+# in the service registration endpoint
+REVERSE_PROXY_MAPPING = {
+    'FarmActivities': 'FarmCalendar',
+    'FarmActivityTypes': 'FarmCalendar',
+    'FarmAssets': 'FarmCalendar',
+    'FarmPlants': 'FarmCalendar',
+    'WeeklyWeatherForecast': 'WeatherService',
+}
+
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
@@ -182,7 +210,7 @@ SIMPLE_JWT = {
     'UPDATE_LAST_LOGIN': True,
 
     'ALGORITHM': 'HS256',
-    'SIGNING_KEY': SECRET_KEY,
+    'SIGNING_KEY': JWT_SIGNING_KEY,
     'VERIFYING_KEY': None,
     'AUDIENCE': None,
     'ISSUER': None,
