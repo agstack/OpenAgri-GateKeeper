@@ -68,7 +68,7 @@ class LoginView(TemplateView):
                 redirect_url = f'{service_post_auth_url}?{encoded_params}'
                 response = HttpResponseRedirect(redirect_url)
             else:
-                response = HttpResponseRedirect(next_url or 'aegis:dashboard')
+                response = HttpResponseRedirect(next_url or reverse('aegis:dashboard'))
 
             # Set cookies
             # response.set_cookie('access_token', access_token)
