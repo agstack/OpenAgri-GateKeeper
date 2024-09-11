@@ -1,7 +1,7 @@
+from django.contrib import admin
 from django.urls import path, include, re_path
 from django.conf import settings
 from django.conf.urls.static import static
-from django.contrib import admin
 from django.contrib.auth.views import LogoutView
 
 from rest_framework import permissions
@@ -12,6 +12,7 @@ from drf_yasg import openapi
 from .views import LoginView, RegisterView, PasswordResetView
 from aegis.views.api import FarmCalendarView, WeatherDataView
 
+from .views import LoginView, RegisterView, PasswordResetView, reverse_proxy
 
 schema_view = get_schema_view(
     openapi.Info(
@@ -50,6 +51,11 @@ urlpatterns = [
     path('reset_password/', PasswordResetView.as_view(), name='reset_password'),
 
     path('aegis/', include('aegis.urls', namespace='aegis')),
+]
+
+# reverse proxy urls
+urlpatterns += [
+    re_path(r'^api/resources/(?P<path>.*)$', reverse_proxy, name='reverse_proxy'),
 ]
 
 if settings.DEBUG:

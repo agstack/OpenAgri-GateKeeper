@@ -1,6 +1,15 @@
 version: '3.12'
 
 services:
+  db:
+    image: postgres:16.3
+    ports:
+      - "${DB_PORT}:5432"
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASS}
+
   # Django application
   web:
     container_name: django_gatekeeper
