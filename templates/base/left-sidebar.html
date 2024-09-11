@@ -1,0 +1,73 @@
+{% load static %}
+{% load custom_filters %}
+{% block left_sidebar %}
+<!-- ========== Left Sidebar Start ========== -->
+<div class="vertical-menu">
+    <div data-simplebar class="h-100">
+        <!--- Sidemenu -->
+        <div id="sidebar-menu">
+        {% load permission_tags %}
+            <ul class="metismenu list-unstyled" id="side-menu">
+                <li>
+                    <a href="{% url 'aegis:dashboard' %}">
+                        <i data-feather="home"></i>
+                        <span data-key="t-dashboard">Dashboard</span>
+                    </a>
+                </li>
+            {% for am in admin_menu %}
+                {% has_view_permission user am.menu_route as can_view %}
+                {% if can_view %}
+                    {# Check if the current menu doesn't have a parent #}
+                    {% if not am.parent_id %}
+                        {# Check if the current menu has submenus #}
+                        {% if am.submenus.all %}
+                            <li class="has-submenu">
+                                <a href="javascript:void(0);" class="has-arrow">
+                                    <i data-feather="{{ am.menu_icon }}"></i>
+                                    <span data-key="t-{{ am.menu_route }}">{{ am.menu_name|title }}</span>
+                                </a>
+                                <ul class="submenu" aria-expanded="false">
+                                    {% for submenu in am.submenus.all %}
+                                        {% has_view_permission user submenu.menu_route as can_view_sub %}
+                                        {% if can_view_sub %}
+                                            <li>
+                                                {% if submenu.menu_route %}
+                                                    <a href="{% url 'aegis:manage-website-data2' submenu.menu_route %}">
+                                                        <span data-key="t-{{ submenu.menu_route }}">{{ submenu.menu_name|title }}</span>
+                                                    </a>
+                                                {% else %}
+                                                    <a href="#">
+                                                        <span data-key="t-{{ submenu.menu_route }}">{{ submenu.menu_name|title }}</span>
+                                                    </a>
+                                                {% endif %}
+                                            </li>
+                                        {% endif %}
+                                    {% endfor %}
+                                </ul>
+                            </li>
+                        {% else %}
+                            <li>
+                                {% if am.menu_route %}
+                                    <a href="{% url 'aegis:'|add:am.menu_route %}">
+                                        <i data-feather="{{ am.menu_icon }}"></i>
+                                        <span data-key="t-{{ am.menu_route }}">{{ am.menu_name|title }}</span>
+                                    </a>
+                                {% else %}
+                                    <a href="#">
+                                        <i data-feather="{{ am.menu_icon }}"></i>
+                                        <span data-key="t-{{ am.menu_route }}">{{ am.menu_name|title }}</span>
+                                    </a>
+                                {% endif %}
+                            </li>
+                        {% endif %}
+                    {% endif %}
+                {% endif %}
+            {% endfor %}
+            </ul>
+        </div>
+        <!-- End Sidemenu -->
+    </div>
+</div>
+<!-- Left Sidebar End -->
+{% endblock left_sidebar %}
+

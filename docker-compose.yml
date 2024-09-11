@@ -1,0 +1,47 @@
+version: '3.12'
+
+services:
+  # Django application
+  web:
+    container_name: django_gatekeeper
+    restart: no
+    environment:
+      - MAINTENANCE_MODE=OFF
+    build: .
+    env_file:
+      - .env
+    volumes:
+      - .:/var/www
+      - asset_volume:/var/www/assets
+      - media_volume:/var/www/media
+      - logs_volume:/var/www/logs
+    ports:
+      - "8001:8001"
+    networks:
+      - shared_network_gatekeeper
+
+  # Nginx
+  nginx:
+    container_name: nginx_gatekeeper
+    image: nginx:1.19
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx:/etc/nginx/conf.d
+      - ./nginx/certs:/etc/nginx/certs  # Mount the local certs directory
+      - asset_volume:/usr/share/nginx/html/assets
+      - media_volume:/usr/share/nginx/html/media
+    depends_on:
+      - web
+    networks:
+      - shared_network_gatekeeper
+
+volumes:
+  asset_volume:
+  media_volume:
+  logs_volume:
+
+networks:
+  shared_network_gatekeeper:
+    external: true
+    driver: bridge

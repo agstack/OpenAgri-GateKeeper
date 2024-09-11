@@ -1,0 +1,36 @@
+version: '3.9'
+
+services:
+  mysql:
+    build: .
+    restart: no
+    container_name: gatekeeper_mysql
+    env_file:
+      - .env
+    ports:
+      - "3310:3306"
+    volumes:
+      - mysql_data_gatekeeper:/var/lib/mysql
+    networks:
+      - shared_network_gatekeeper
+
+  phpmyadmin_gatekeeper:
+    image: phpmyadmin/phpmyadmin
+    container_name: gatekeeper_phpmyadmin
+    restart: no
+    env_file:
+      - .env
+    ports:
+      - "8087:80"
+    networks:
+      - shared_network_gatekeeper
+    depends_on:
+      - mysql
+
+volumes:
+  mysql_data_gatekeeper: {}
+
+networks:
+  shared_network_gatekeeper:
+    driver: bridge
+    external: true
