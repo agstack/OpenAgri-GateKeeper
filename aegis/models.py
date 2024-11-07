@@ -11,18 +11,22 @@ from simple_history.models import HistoricalRecords
 
 
 class BaseModel(models.Model):
-    status = models.BooleanField(default=True, verbose_name='Status')
-    deleted = models.BooleanField(default=False, verbose_name='Is Deleted')
+    STATUS_CHOICES = [
+        (0, 'Active'),
+        (1, 'Inactive'),
+        (2, 'Deleted'),
+    ]
+
+    status = models.SmallIntegerField(choices=STATUS_CHOICES, default=0, verbose_name='Status')
     deleted_at = models.DateTimeField(null=True, blank=True, verbose_name='Deleted At')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Created At')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Updated At')
 
     class Meta:
-        abstract = True  # This ensures Django won’t create a table for this model
+        abstract = True
 
     def soft_delete(self):
-        """Soft delete by setting `deleted` to True and `deleted_at` to the current timestamp."""
-        self.deleted = True
+        self.status = 2
         self.deleted_at = timezone.now()
         self.save()
 
