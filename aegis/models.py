@@ -1,12 +1,30 @@
 import uuid
 
-from django.db import models
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, AbstractUser
 from django.core.validators import RegexValidator
-from django.conf import settings
+from django.db import models
+from django.utils import timezone
 
 from simple_history.models import HistoricalRecords
+
+
+class BaseModel(models.Model):
+    status = models.BooleanField(default=True, verbose_name='Status')
+    deleted = models.BooleanField(default=False, verbose_name='Is Deleted')
+    deleted_at = models.DateTimeField(null=True, blank=True, verbose_name='Deleted At')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Created At')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Updated At')
+
+    class Meta:
+        abstract = True  # This ensures Django won’t create a table for this model
+
+    def soft_delete(self):
+        """Soft delete by setting `deleted` to True and `deleted_at` to the current timestamp."""
+        self.deleted = True
+        self.deleted_at = timezone.now()
+        self.save()
 
 
 class RequestLog(models.Model):
@@ -44,12 +62,7 @@ class DefaultAuthUserExtend(AbstractUser):
         return f"{self.email} {self.first_name}"
 
 
-class AdminMenuMaster(models.Model):
-    class Meta:
-        db_table = "admin_menu_master"
-        verbose_name = "Admin Menu"
-        verbose_name_plural = "Admin Menus"
-
+class AdminMenuMaster(BaseModel):
     id = models.SmallAutoField(primary_key=True, db_column='id', db_index=True, editable=False, unique=True,
                                blank=False, null=False, verbose_name='ID')
     parent_id = models.ForeignKey('self', null=True, blank=True, related_name='submenus', db_column='parent_id',
@@ -65,23 +78,16 @@ class AdminMenuMaster(models.Model):
     menu_order = models.SmallIntegerField(null=True, blank=True,
                                           validators=[RegexValidator(regex=r'^[0-9]+$', message="Invalid characters")])
 
-    status = models.BooleanField(default=True, verbose_name='Status')
-    deleted = models.BooleanField(default=False, verbose_name='Is Deleted')
-    deleted_at = models.DateTimeField(null=True, blank=True, verbose_name='Deleted At')
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Created At')
-    updated_at = models.DateTimeField(auto_now=True, verbose_name='Updated At')
+    class Meta:
+        db_table = "admin_menu_master"
+        verbose_name = "Admin Menu"
+        verbose_name_plural = "Admin Menus"
 
     def __str__(self):
         return f"{self.menu_name} ({self.menu_route})"
 
 
-class PermissionMaster(models.Model):
-    class Meta:
-        unique_together = ('menu', 'action')
-        db_table = "permission_master"
-        verbose_name = "Permission"
-        verbose_name_plural = "Permissions"
-
+class PermissionMaster(BaseModel):
     ACTION_CHOICES = (
         ('add', 'add'),
         ('edit', 'edit'),
@@ -93,63 +99,46 @@ class PermissionMaster(models.Model):
 
     menu = models.ForeignKey(AdminMenuMaster, on_delete=models.CASCADE)
     action = models.CharField(max_length=20, choices=ACTION_CHOICES)
-
     is_virtual = models.BooleanField(default=False)
 
-    status = models.BooleanField(default=True, verbose_name='Status')
-    deleted = models.BooleanField(default=False, verbose_name='Is Deleted')
-    deleted_at = models.DateTimeField(null=True, blank=True, verbose_name='Deleted At')
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Created At')
-    updated_at = models.DateTimeField(auto_now=True, verbose_name='Updated At')
+    class Meta:
+        unique_together = ('menu', 'action')
+        db_table = "permission_master"
+        verbose_name = "Permission"
+        verbose_name_plural = "Permissions"
 
     def __str__(self):
         return f"{self.menu.menu_route}_{self.action}"
 
 
-class CustomPermissions(models.Model):
+class CustomPermissions(BaseModel):
+    id = models.AutoField(primary_key=True, db_column='id', db_index=True, editable=False, unique=True,
+                             blank=False, null=False, verbose_name='ID')
+
+    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
+    permission_name = models.ForeignKey(PermissionMaster, on_delete=models.CASCADE)
+
     class Meta:
         db_table = "custom_permissions"
         verbose_name = "Custom Permission"
         verbose_name_plural = "Custom Permissions"
         unique_together = ('user', 'permission_name')
 
-    id = models.AutoField(primary_key=True, db_column='id', db_index=True, editable=False, unique=True,
-                             blank=False, null=False, verbose_name='ID')
-
-    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
-    # permission_name = models.CharField(max_length=100, blank=False, null=False, unique=True)
-    permission_name = models.ForeignKey(PermissionMaster, on_delete=models.CASCADE)
-
-    status = models.BooleanField(default=True, verbose_name='Status')
-    deleted = models.BooleanField(default=False, verbose_name='Is Deleted')
-    deleted_at = models.DateTimeField(null=True, blank=True, verbose_name='Deleted At')
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Created At')
-    updated_at = models.DateTimeField(auto_now=True, verbose_name='Updated At')
-
     def __str__(self):
         return str(self.permission_name)
 
 
-class GroupCustomPermissions(models.Model):
-    class Meta:
-        db_table = "custom_group_permissions"
-        verbose_name = "Group Custom Permission"
-        verbose_name_plural = "Group Custom Permissions"
-        # unique_together = ('group', 'permission_name')
-
+class GroupCustomPermissions(BaseModel):
     id = models.AutoField(primary_key=True, db_column='id', db_index=True, editable=False, unique=True,
                           blank=False, null=False, verbose_name='ID')
 
     group = models.ForeignKey(Group, on_delete=models.CASCADE)
     permission_names = models.ManyToManyField(PermissionMaster)
 
-    status = models.BooleanField(default=True, verbose_name='Status')
-    deleted = models.BooleanField(default=False, verbose_name='Is Deleted')
-    deleted_at = models.DateTimeField(null=True, blank=True, verbose_name='Deleted At')
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Created At')
-    updated_at = models.DateTimeField(auto_now=True, verbose_name='Updated At')
+    class Meta:
+        db_table = "custom_group_permissions"
+        verbose_name = "Group Custom Permission"
+        verbose_name_plural = "Group Custom Permissions"
 
     def __str__(self):
         return f"{self.group} {str(self.permission_names)}"
-
-
