@@ -1,14 +1,12 @@
-version: '3.9'
-
 services:
   mysql:
     build: .
     restart: no
-    container_name: gatekeeper_mysql
+    container_name: gatekeeper_mysql_django
     env_file:
       - .env
     ports:
-      - "3310:3306"
+      - "3312:3306"
     volumes:
       - mysql_data_gatekeeper:/var/lib/mysql
     networks:
@@ -16,21 +14,20 @@ services:
 
   phpmyadmin_gatekeeper:
     image: phpmyadmin/phpmyadmin
-    container_name: gatekeeper_phpmyadmin
+    container_name: gatekeeper_phpmyadmin_django
     restart: no
     env_file:
       - .env
     ports:
-      - "8087:80"
+      - "8088:80"
     networks:
       - shared_network_gatekeeper
     depends_on:
       - mysql
 
 volumes:
-  mysql_data_gatekeeper: {}
+  mysql_data_gatekeeper_django: {}
 
 networks:
   shared_network_gatekeeper:
     driver: bridge
-    external: true
