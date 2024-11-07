@@ -1,16 +1,18 @@
-from django.urls import path, include, re_path
 from django.conf import settings
+from django.conf.urls import handler404
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.auth.views import LogoutView
+from django.urls import path, include, re_path
 
-from rest_framework import permissions
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
+from rest_framework import permissions
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from .views import LoginView, RegisterView, PasswordResetView
 from aegis.views.api import FarmCalendarView, WeatherDataView
+from .common import custom_page_not_found_view
 
 
 schema_view = get_schema_view(
@@ -55,3 +57,5 @@ urlpatterns = [
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+handler404 = custom_page_not_found_view
