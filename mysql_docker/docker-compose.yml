@@ -8,7 +8,7 @@ services:
     ports:
       - "3312:3306"
     volumes:
-      - mysql_data_gatekeeper:/var/lib/mysql
+      - mysql_data_gatekeeper_django:/var/lib/mysql
     networks:
       - shared_network_gatekeeper
 
