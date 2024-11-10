@@ -16,7 +16,7 @@ if not os.path.exists(LOG_DIR):
     os.makedirs(LOG_DIR)
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-6s%ry4k3qqh0(tu8=3z35+vy7mh86_6u-1ce@by0fb5wqx_-^n'
+SECRET_KEY = os.getenv('SECRET_KEY')
 
 JWT_SIGNING_KEY = os.environ.get('JWT_SIGNING_KEY')
 JWT_ALG = os.environ.get('JWT_ALG')
@@ -78,6 +78,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+
+    # 'gatekeeper.middleware.jwt_middleware',
 ]
 
 ROOT_URLCONF = 'gatekeeper.urls'
@@ -177,7 +179,12 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Custom user model replacing the default Django user model.
 AUTH_USER_MODEL = 'aegis.DefaultAuthUserExtend'
 
-DJANGO_PORT = os.getenv('DJANGO_PORT', '8001')
+DJANGO_PORT = os.getenv('APP_PORT', '8001')
+
+# JWT Token Expiry Settings
+ACCESS_TOKEN_EXPIRE_HOURS = 1  # Expires in 1 hour
+REFRESH_TOKEN_EXPIRE_DAYS = 7  # Expires in 7 days
+AUTH_TOKEN_EXPIRE_MINUTES = 15  # Expires in 15 minutes
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
@@ -262,3 +269,5 @@ LOGGING = {
         },
     },
 }
+
+FARM_CALENDAR = os.getenv('FARM_CALENDAR')

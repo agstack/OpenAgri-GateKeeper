@@ -12,12 +12,12 @@ from simple_history.models import HistoricalRecords
 
 class BaseModel(models.Model):
     STATUS_CHOICES = [
-        (0, 'Active'),
-        (1, 'Inactive'),
+        (1, 'Active'),
+        (0, 'Inactive'),
         (2, 'Deleted'),
     ]
 
-    status = models.SmallIntegerField(choices=STATUS_CHOICES, default=0, verbose_name='Status')
+    status = models.SmallIntegerField(choices=STATUS_CHOICES, default=1, verbose_name='Status')
     deleted_at = models.DateTimeField(null=True, blank=True, verbose_name='Deleted At')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Created At')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Updated At')
@@ -48,12 +48,7 @@ class RequestLog(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
 
 
-class DefaultAuthUserExtend(AbstractUser):
-    class Meta:
-        db_table = 'auth_user_extend'
-        verbose_name = 'User Master'
-        verbose_name_plural = 'User Masters'
-
+class DefaultAuthUserExtend(AbstractUser, BaseModel):
     uuid = models.UUIDField(unique=True, default=uuid.uuid4, editable=False)
     email = models.EmailField(unique=True)
     contact_no = models.CharField(max_length=10, null=True, db_index=True, default='', blank=True,
@@ -61,6 +56,11 @@ class DefaultAuthUserExtend(AbstractUser):
     token_version = models.IntegerField(default=1)
 
     history = HistoricalRecords(table_name="history_auth_user_extend")
+
+    class Meta:
+        db_table = 'auth_user_extend'
+        verbose_name = 'User Master'
+        verbose_name_plural = 'User Masters'
 
     def __str__(self):
         return f"{self.email} {self.first_name}"

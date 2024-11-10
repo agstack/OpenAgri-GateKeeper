@@ -1,7 +1,7 @@
 services:
   mysql:
     build: .
-    restart: no
+    restart: always
     container_name: gatekeeper_mysql_django
     env_file:
       - .env
@@ -15,7 +15,7 @@ services:
   phpmyadmin_gatekeeper:
     image: phpmyadmin/phpmyadmin
     container_name: gatekeeper_phpmyadmin_django
-    restart: no
+    restart: always
     env_file:
       - .env
     ports:

@@ -11,6 +11,7 @@ from rest_framework import permissions
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from .views import LoginView, RegisterView, PasswordResetView
+from aegis.views.auth_views import LoginView, RegisterView
 from aegis.views.api import FarmCalendarView, WeatherDataView
 from .common import custom_page_not_found_view
 
@@ -35,21 +36,17 @@ urlpatterns = [
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
 
-
     path('admin/', admin.site.urls),
 
+    path('login/', LoginView.as_view(), name='login'),
+    path('register/', RegisterView.as_view(), name='register'),
+
     # path('o/', include('oauth2_provider.urls', namespace='oauth2_provider')),
-    # path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    # path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
     path('api/farm_calendar/', FarmCalendarView.as_view(), name='farm_calendar'),
     path('api/weather_data/', WeatherDataView.as_view(), name='weather_data'),
-
-    # path('', LoginView.as_view(), name='home'),
-    path('login/', LoginView.as_view(), name='login'),
-    path('logout/', LogoutView.as_view(next_page='login'), name='logout'),
-    path('register/', RegisterView.as_view(), name='register'),
-    path('reset_password/', PasswordResetView.as_view(), name='reset_password'),
 
     path('aegis/', include('aegis.urls', namespace='aegis')),
 ]
