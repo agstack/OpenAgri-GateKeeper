@@ -23,7 +23,7 @@ if not os.path.exists(LOG_DIR):
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
 
 JWT_SIGNING_KEY = os.environ.get('JWT_SIGNING_KEY')
-JWT_ALG = os.environ.get('JWT_ALG')
+JWT_ALG = os.environ.get('JWT_ALG', "HS256")
 
 # geting from env var from now, but in the future this infos should
 # come with the service registration post request
