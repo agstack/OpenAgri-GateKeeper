@@ -34,7 +34,7 @@ RUN chown -R www-data:www-data /var/www/logs
 RUN pip install --upgrade pip
 
 COPY requirements.txt /var/www/
-RUN pip install -r requirements.txt --upgrade
+RUN pip install -r requirements.txt
 
 # Copy the current directory contents into the container at /var/www
 COPY . /var/www

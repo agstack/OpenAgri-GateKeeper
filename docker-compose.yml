@@ -3,7 +3,7 @@ version: '3.12'
 services:
   # Django application
   web:
-    image: ghcr.io/openagri-eu/gatekeeper:latest
+    image: ghcr.io/openagri-eu/gatekeeper:dev
     container_name: django_gatekeeper
     restart: no
     environment:
