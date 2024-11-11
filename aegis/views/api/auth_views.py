@@ -22,12 +22,10 @@ class LoginAPIView(APIView):
     authentication_classes = []
 
     def post(self, request):
-        login = request.data.get("login")
+        username = request.data.get("username")
         password = request.data.get("password")
 
-        print("Inside api login POST")
-
-        user, access_token, refresh_token = authenticate_user(login, password)
+        user, access_token, refresh_token = authenticate_user(username, password)
 
         if user:
             return Response({

@@ -10,7 +10,6 @@ from drf_yasg import openapi
 from rest_framework import permissions
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
-from .views import LoginView, RegisterView, PasswordResetView
 from aegis.views.auth_views import LoginView, RegisterView
 from aegis.views.api.auth_views import LoginAPIView, LogoutAPIView, RegisterAPIView, TokenValidationAPIView
 from .common import custom_page_not_found_view

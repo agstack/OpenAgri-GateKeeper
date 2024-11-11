@@ -24,12 +24,12 @@ def register_user(username, email, password, first_name='', last_name=''):
     except IntegrityError:
         raise ValidationError("Username or email already exists")
 
-def authenticate_user(login: str, password: str):
+def authenticate_user(username: str, password: str):
     try:
-        user = DefaultAuthUserExtend.objects.get(username=login, status=1)
+        user = DefaultAuthUserExtend.objects.get(username=username, status=1)
     except DefaultAuthUserExtend.DoesNotExist:
         try:
-            user = DefaultAuthUserExtend.objects.get(email=login, status=1)
+            user = DefaultAuthUserExtend.objects.get(email=username, status=1)
         except DefaultAuthUserExtend.DoesNotExist:
             return None, None, None
 
@@ -38,6 +38,14 @@ def authenticate_user(login: str, password: str):
 
     # Use SimpleJWT to generate access and refresh tokens
     refresh = RefreshToken.for_user(user)
+
+    # Add custom claims to the access token
+    refresh["username"] = user.username
+    refresh["email"] = user.email
+    refresh["first_name"] = user.first_name
+    refresh["last_name"] = user.last_name
+    refresh["uuid"] = str(user.uuid)
+
     access_token = str(refresh.access_token)
     refresh_token = str(refresh)
 

@@ -35,11 +35,11 @@ class LoginView(FormView):
         form = self.form_class(request.POST)
 
         if form.is_valid():
-            login = form.cleaned_data["login"]
+            username = form.cleaned_data["username"]
             password = form.cleaned_data["password"]
 
             # Authenticate the user
-            user, access_token, refresh_token = authenticate_user(login, password)
+            user, access_token, refresh_token = authenticate_user(username, password)
             if user:
                 if next_url == "FarmCalendar":
                     next_url = settings.FARM_CALENDAR

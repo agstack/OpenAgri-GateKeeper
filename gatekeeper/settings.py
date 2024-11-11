@@ -181,11 +181,6 @@ AUTH_USER_MODEL = 'aegis.DefaultAuthUserExtend'
 
 DJANGO_PORT = os.getenv('APP_PORT', '8001')
 
-# JWT Token Expiry Settings
-# ACCESS_TOKEN_EXPIRE_HOURS = 1  # Expires in 1 hour
-# REFRESH_TOKEN_EXPIRE_DAYS = 7  # Expires in 7 days
-# AUTH_TOKEN_EXPIRE_MINUTES = 15  # Expires in 15 minutes
-
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
@@ -203,8 +198,8 @@ SIMPLE_JWT = {
 
     'AUTH_HEADER_TYPES': ('Bearer',),
     'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
-    'USER_ID_FIELD': 'id',
-    'USER_ID_CLAIM': 'user_id',
+    'USER_ID_FIELD': 'uuid',
+    'USER_ID_CLAIM': 'uuid',
     'USER_AUTHENTICATION_RULE': 'rest_framework_simplejwt.authentication.default_user_authentication_rule',
 }
 
