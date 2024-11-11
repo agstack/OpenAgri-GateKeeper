@@ -141,39 +141,90 @@ class TokenValidationAPIView(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view(['GET', 'POST', 'PUT', 'DELETE'])
-@permission_classes([IsAuthenticated])
-def reverse_proxy(request, path):
+class ReverseProxyAPIView(APIView):
+    permission_classes = [IsAuthenticated]
 
-    provider_api = None
-    for open_agri_entity, resource_provider_id in settings.REVERSE_PROXY_MAPPING.items():
-        if open_agri_entity in path:
-            provider_api = settings.AVAILABLE_SERVICES.get(resource_provider_id, {}).get('api')
-    if provider_api is None:
-        return JsonResponse({'error': 'No service can provide this resource.'}, status=405)
+    def dispatch_request(self, request, path):
+        provider_api = None
+        for open_agri_entity, resource_provider_id in settings.REVERSE_PROXY_MAPPING.items():
+            if open_agri_entity in path:
+                provider_api = settings.AVAILABLE_SERVICES.get(resource_provider_id, {}).get('api')
+                break
 
-    url = f"{provider_api}{path}"
-    method = request.method
+        if provider_api is None:
+            return JsonResponse({'error': 'No service can provide this resource.'}, status=405)
 
-    # Forward the request headers and body
-    headers = {key: value for key, value in request.headers.items() if key != 'Host'}
-    data = request.body
+        url = f"{provider_api}{path}"
+        headers = {key: value for key, value in request.headers.items() if key.lower() != 'host'}
+        data = request.body
+        method = request.method
 
-    # Forward the request based on the HTTP method
-    if method == 'POST':
-        response = requests.post(url, headers=headers, data=data)
-    elif method == 'GET':
-        response = requests.get(url, headers=headers, params=request.GET)
-    elif method == 'PUT':
-        response = requests.put(url, headers=headers, data=data)
-    elif method == 'DELETE':
-        response = requests.delete(url, headers=headers, data=data)
-    else:
-        return JsonResponse({'error': 'Method not supported'}, status=405)
+        try:
+            if method == 'POST':
+                response = requests.post(url, headers=headers, data=data)
+            elif method == 'GET':
+                response = requests.get(url, headers=headers, params=request.GET)
+            elif method == 'PUT':
+                response = requests.put(url, headers=headers, data=data)
+            elif method == 'DELETE':
+                response = requests.delete(url, headers=headers, data=data)
+            else:
+                return JsonResponse({'error': 'Method not supported'}, status=405)
 
-    # Create a Django response object with the same status code and content
-    return HttpResponse(
-        response.content,
-        status=response.status_code,
-        content_type=response.headers.get('Content-Type', 'application/json')
-    )
+            return HttpResponse(
+                response.content,
+                status=response.status_code,
+                content_type=response.headers.get('Content-Type', 'application/json')
+            )
+        except requests.RequestException as e:
+            return JsonResponse({'error': f"Request to external service failed: {str(e)}"}, status=500)
+
+    def get(self, request, path):
+        return self.dispatch_request(request, path)
+
+    def post(self, request, path):
+        return self.dispatch_request(request, path)
+
+    def put(self, request, path):
+        return self.dispatch_request(request, path)
+
+    def delete(self, request, path):
+        return self.dispatch_request(request, path)
+
+
+# @api_view(['GET', 'POST', 'PUT', 'DELETE'])
+# @permission_classes([IsAuthenticated])
+# def reverse_proxy(request, path):
+#
+#     provider_api = None
+#     for open_agri_entity, resource_provider_id in settings.REVERSE_PROXY_MAPPING.items():
+#         if open_agri_entity in path:
+#             provider_api = settings.AVAILABLE_SERVICES.get(resource_provider_id, {}).get('api')
+#     if provider_api is None:
+#         return JsonResponse({'error': 'No service can provide this resource.'}, status=405)
+#
+#     url = f"{provider_api}{path}"
+#     method = request.method
+#
+#     # Forward the request headers and body
+#     headers = {key: value for key, value in request.headers.items() if key != 'Host'}
+#     data = request.body
+#
+#     # Forward the request based on the HTTP method
+#     if method == 'POST':
+#         response = requests.post(url, headers=headers, data=data)
+#     elif method == 'GET':
+#         response = requests.get(url, headers=headers, params=request.GET)
+#     elif method == 'PUT':
+#         response = requests.put(url, headers=headers, data=data)
+#     elif method == 'DELETE':
+#         response = requests.delete(url, headers=headers, data=data)
+#     else:
+#         return JsonResponse({'error': 'Method not supported'}, status=405)
+#
+#     # Create a Django response object with the same status code and content
+#     return HttpResponse(
+#         response.content,
+#         status=response.status_code,
+#         content_type=response.headers.get('Content-Type', 'application/json')
+#     )
