@@ -182,9 +182,9 @@ AUTH_USER_MODEL = 'aegis.DefaultAuthUserExtend'
 DJANGO_PORT = os.getenv('APP_PORT', '8001')
 
 # JWT Token Expiry Settings
-ACCESS_TOKEN_EXPIRE_HOURS = 1  # Expires in 1 hour
-REFRESH_TOKEN_EXPIRE_DAYS = 7  # Expires in 7 days
-AUTH_TOKEN_EXPIRE_MINUTES = 15  # Expires in 15 minutes
+# ACCESS_TOKEN_EXPIRE_HOURS = 1  # Expires in 1 hour
+# REFRESH_TOKEN_EXPIRE_DAYS = 7  # Expires in 7 days
+# AUTH_TOKEN_EXPIRE_MINUTES = 15  # Expires in 15 minutes
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
@@ -193,8 +193,8 @@ SIMPLE_JWT = {
     'BLACKLIST_AFTER_ROTATION': True,
     'UPDATE_LAST_LOGIN': True,
 
-    'ALGORITHM': 'HS256',
-    'SIGNING_KEY': SECRET_KEY,
+    'ALGORITHM': JWT_ALG,
+    'SIGNING_KEY': JWT_SIGNING_KEY,
     'VERIFYING_KEY': None,
     'AUDIENCE': None,
     'ISSUER': None,

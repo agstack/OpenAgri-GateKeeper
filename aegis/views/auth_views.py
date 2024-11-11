@@ -88,7 +88,7 @@ class RegisterView(FormView):
                     username=form.cleaned_data["username"],
                     email=form.cleaned_data["email"],
                     password=form.cleaned_data["password"],
-                    contact_no=form.cleaned_data["contact_no"],
+                    # contact_no=form.cleaned_data["contact_no"],
                     first_name=form.cleaned_data["first_name"],
                     last_name=form.cleaned_data["last_name"]
                 )

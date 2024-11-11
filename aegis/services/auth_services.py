@@ -5,11 +5,11 @@ from django.core.exceptions import ValidationError
 
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from aegis.utils.auth_utils import hash_password, verify_password, create_jwt_token, decode_jwt_token
+from aegis.utils.auth_utils import hash_password, verify_password
 from aegis.models import DefaultAuthUserExtend
 
 
-def register_user(username, email, password, contact_no, first_name='', last_name=''):
+def register_user(username, email, password, first_name='', last_name=''):
     try:
         hashed_password = hash_password(password)
         user = DefaultAuthUserExtend.objects.create(
@@ -18,7 +18,7 @@ def register_user(username, email, password, contact_no, first_name='', last_nam
             username=username,
             email=email,
             password=hashed_password,
-            contact_no=contact_no
+            # contact_no=contact_no
         )
         return {"message": "User created successfully", "user_id": user.uuid}
     except IntegrityError:
@@ -35,10 +35,6 @@ def authenticate_user(login: str, password: str):
 
     if not verify_password(password, user.password):
         return None, None, None
-
-    # token_data = {"user_id": user.id, "username": user.username, "email": user.email}
-    # access_token = create_jwt_token(token_data, token_type="access")
-    # refresh_token = create_jwt_token(token_data, token_type="refresh")
 
     # Use SimpleJWT to generate access and refresh tokens
     refresh = RefreshToken.for_user(user)
