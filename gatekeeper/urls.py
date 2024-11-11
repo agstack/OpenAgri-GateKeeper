@@ -11,7 +11,8 @@ from rest_framework import permissions
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from aegis.views.auth_views import LoginView, RegisterView
-from aegis.views.api.auth_views import LoginAPIView, LogoutAPIView, RegisterAPIView, TokenValidationAPIView
+from aegis.views.api.auth_views import (LoginAPIView, LogoutAPIView, RegisterAPIView, TokenValidationAPIView,
+                                        reverse_proxy)
 from .common import custom_page_not_found_view
 
 
@@ -48,6 +49,7 @@ urlpatterns = [
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
+    re_path(r'^api/resources/(?P<path>.*)$', reverse_proxy, name='reverse_proxy'),
     path('aegis/', include('aegis.urls', namespace='aegis')),
 ]
 

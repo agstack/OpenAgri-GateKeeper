@@ -1,9 +1,13 @@
+import dj_database_url
 import os
-from pathlib import Path
-from dotenv import load_dotenv
+
 from datetime import timedelta
+from dotenv import load_dotenv
+from pathlib import Path
 
 from django.contrib.messages import constants as messages
+
+from .env_helpers import get_env_var
 
 load_dotenv()
 
@@ -21,10 +25,39 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 JWT_SIGNING_KEY = os.environ.get('JWT_SIGNING_KEY')
 JWT_ALG = os.environ.get('JWT_ALG')
 
+# geting from env var from now, but in the future this infos should
+# come with the service registration post request
+AVAILABLE_SERVICES = {
+    'FarmCalendar':
+    {
+        'api': os.getenv('FARM_CALENDAR_API', 'http://127.0.0.1:8002/api/'),
+        'post_auth': os.getenv('FARM_CALENDAR_POST_AUTH', 'http://127.0.0.1:8002/post_auth/')
+    },
+    'WeatherService': {
+        'api': 'http://external_weather/api/',
+        'post_auth': None,
+    },
+}
+# same with this data, also cames in the service announcement
+# in the service registration endpoint
+REVERSE_PROXY_MAPPING = {
+    'Farm': 'FarmCalendar',
+    'FarmActivities': 'FarmCalendar',
+    'FarmActivityTypes': 'FarmCalendar',
+    'FarmAssets': 'FarmCalendar',
+    'FarmPlants': 'FarmCalendar',
+    'WeeklyWeatherForecast': 'WeatherService',
+}
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+ALLOWED_HOSTS = ['.localhost', '127.0.0.1', '[::1]']
+EXTRA_ALLOWED_HOSTS = os.environ.get('EXTRA_ALLOWED_HOSTS', None)
+if EXTRA_ALLOWED_HOSTS is not None:
+    EXTRA_ALLOWED_HOSTS = EXTRA_ALLOWED_HOSTS.split(',')
+    ALLOWED_HOSTS.extend(EXTRA_ALLOWED_HOSTS)
+
 
 APPEND_SLASH = True
 
@@ -108,15 +141,24 @@ WSGI_APPLICATION = 'gatekeeper.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.mysql',
+#         'NAME': os.getenv("DB_NAME"),
+#         'USER': os.getenv("DB_USER"),
+#         'PASSWORD': os.getenv("DB_PASS"),
+#         'HOST': os.getenv("DB_HOST"),
+#         'PORT': os.getenv("DB_PORT"),
+#     },
+# }
+
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': os.getenv("DB_NAME"),
-        'USER': os.getenv("DB_USER"),
-        'PASSWORD': os.getenv("DB_PASS"),
-        'HOST': os.getenv("DB_HOST"),
-        'PORT': os.getenv("DB_PORT"),
-    },
+    'default': dj_database_url.config(
+        default=(
+            f'mysql://{os.getenv("DB_USER")}:{os.getenv("DB_PASS")}@'
+            f'{os.getenv("DB_HOST")}:{os.getenv("DB_PORT")}/{os.getenv("DB_NAME")}'
+        )
+    )
 }
 
 
