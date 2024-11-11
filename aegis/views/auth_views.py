@@ -42,7 +42,7 @@ class LoginView(FormView):
             user, access_token, refresh_token = authenticate_user(username, password)
             if user:
                 if next_url == "FarmCalendar":
-                    next_url = settings.FARM_CALENDAR
+                    next_url = settings.AVAILABLE_SERVICES.get(next_url, {}).get('post_auth')
                 elif not next_url:
                     next_url = self.success_url
 
