@@ -16,3 +16,4 @@ README.md
 .Python
 *.git
 *.hg
+.env
