@@ -20,7 +20,7 @@ if not os.path.exists(LOG_DIR):
     os.makedirs(LOG_DIR)
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY')
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
 
 JWT_SIGNING_KEY = os.environ.get('JWT_SIGNING_KEY')
 JWT_ALG = os.environ.get('JWT_ALG')
