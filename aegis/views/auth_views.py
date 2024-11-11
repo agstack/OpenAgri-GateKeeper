@@ -3,8 +3,10 @@
 from django import forms
 from django.conf import settings
 from django.http import HttpResponseRedirect
-from django.views.generic.edit import FormView
 from django.urls import reverse_lazy
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import never_cache
+from django.views.generic.edit import FormView
 
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
 
@@ -12,6 +14,7 @@ from aegis.forms import UserRegistrationForm, UserLoginForm
 from aegis.services.auth_services import register_user, authenticate_user
 
 
+@method_decorator(never_cache, name='dispatch')
 class LoginView(FormView):
     template_name = "auth/login.html"
     form_class = UserLoginForm
@@ -30,8 +33,6 @@ class LoginView(FormView):
     def post(self, request, *args, **kwargs):
         next_url = request.POST.get("next") or request.GET.get("next", "")
         form = self.form_class(request.POST)
-        print("POST: ", request.POST)
-        print("GET: ", request.GET)
 
         if form.is_valid():
             login = form.cleaned_data["login"]
@@ -62,6 +63,7 @@ class LoginView(FormView):
         return self.render_to_response(self.get_context_data(form=form))
 
 
+@method_decorator(never_cache, name='dispatch')
 class RegisterView(FormView):
     template_name = "auth/register.html"
     form_class = UserRegistrationForm

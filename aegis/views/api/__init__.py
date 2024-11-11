@@ -1,2 +1,1 @@
-from aegis.views.api.FarmCalendarView import *
-from aegis.views.api.WeatherDataView import *
+from .auth_views import LoginAPIView, RegisterAPIView, LogoutAPIView, TokenValidationAPIView
