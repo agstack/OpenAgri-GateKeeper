@@ -26,7 +26,6 @@ class UserRegistrationForm(forms.ModelForm):
 class UserLoginForm(forms.Form):
     username = forms.CharField(
         max_length=100,
-        help_text="Username or Email",
         label="Username or Email",
     )
     password = forms.CharField(widget=forms.PasswordInput, label="Password")

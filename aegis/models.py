@@ -10,6 +10,11 @@ from django.utils import timezone
 from simple_history.models import HistoricalRecords
 
 
+class ActivePageManager(models.Manager):
+    def get_queryset(self):
+        return super().get_queryset().filter(status=1)
+
+
 class BaseModel(models.Model):
     STATUS_CHOICES = [
         (1, 'Active'),
@@ -21,6 +26,9 @@ class BaseModel(models.Model):
     deleted_at = models.DateTimeField(null=True, blank=True, verbose_name='Deleted At')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Created At')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Updated At')
+
+    objects = models.Manager()  # Default manager.
+    active_objects = ActivePageManager()  # Custom manager for active objects.
 
     class Meta:
         abstract = True
@@ -55,7 +63,7 @@ class DefaultAuthUserExtend(AbstractUser, BaseModel):
                                   validators=[RegexValidator(regex=r'^[0-9- ]+$', message="Invalid phone number")])
     token_version = models.IntegerField(default=1)
 
-    history = HistoricalRecords(table_name="history_auth_user_extend")
+    history = HistoricalRecords(table_name="auth_user_extend_history")
 
     class Meta:
         db_table = 'auth_user_extend'
@@ -64,6 +72,25 @@ class DefaultAuthUserExtend(AbstractUser, BaseModel):
 
     def __str__(self):
         return f"{self.email} {self.first_name}"
+
+
+class RegisteredService(BaseModel):
+    id = models.AutoField(primary_key=True, db_column='id', db_index=True, editable=False, unique=True,
+                          blank=False, null=False, verbose_name='ID')
+    service_name = models.CharField(max_length=100)
+    endpoint = models.CharField(max_length=255)
+    methods = models.JSONField()
+    params = models.JSONField()
+
+    history = HistoricalRecords(table_name="registered_services_history")
+
+    class Meta:
+        db_table = 'registered_services'
+        verbose_name = 'Registered Service'
+        verbose_name_plural = 'Registered Services'
+
+    def __str__(self):
+        return self.service_name
 
 
 class AdminMenuMaster(BaseModel):
@@ -81,6 +108,8 @@ class AdminMenuMaster(BaseModel):
                                    validators=[RegexValidator(regex=r'^[a-zA-Z0-9\s-]+$', message="Invalid characters")])
     menu_order = models.SmallIntegerField(null=True, blank=True,
                                           validators=[RegexValidator(regex=r'^[0-9]+$', message="Invalid characters")])
+
+    history = HistoricalRecords(table_name="admin_menu_master_history")
 
     class Meta:
         db_table = "admin_menu_master"

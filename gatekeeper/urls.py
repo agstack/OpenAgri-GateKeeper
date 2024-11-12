@@ -1,8 +1,6 @@
 from django.conf import settings
-from django.conf.urls import handler404
 from django.conf.urls.static import static
 from django.contrib import admin
-from django.contrib.auth.views import LogoutView
 from django.urls import path, include, re_path
 
 from drf_yasg.views import get_schema_view
@@ -13,6 +11,8 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from aegis.views.auth_views import LoginView, RegisterView
 from aegis.views.api.auth_views import (LoginAPIView, LogoutAPIView, RegisterAPIView, TokenValidationAPIView,
                                         ReverseProxyAPIView)
+from aegis.views.api.service_registry_views import (ServiceDirectoryAPIView, RegisterServiceAPIView,
+                                                    DeleteServiceAPIView)
 from .common import custom_page_not_found_view
 
 
@@ -45,6 +45,10 @@ urlpatterns = [
     path('api/logout/', LogoutAPIView.as_view(), name='api_logout'),
     path('api/register/', RegisterAPIView.as_view(), name='api_register'),
     path('api/validate_token/', TokenValidationAPIView.as_view(), name='validate_token'),
+
+    path('api/register_service/', RegisterServiceAPIView.as_view(), name='register_service'),
+    path('api/service_directory/', ServiceDirectoryAPIView.as_view(), name='service_directory'),
+    path('api/delete_service/', DeleteServiceAPIView.as_view(), name='delete_service'),
 
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
