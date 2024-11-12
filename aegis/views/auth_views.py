@@ -1,5 +1,7 @@
 # views/auth_views.py
 
+import requests
+
 from django import forms
 from django.conf import settings
 from django.http import HttpResponseRedirect
@@ -8,6 +10,7 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from django.views.generic.edit import FormView
 
+from rest_framework import status
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
 
 from aegis.forms import UserRegistrationForm, UserLoginForm
@@ -38,9 +41,18 @@ class LoginView(FormView):
             username = form.cleaned_data["username"]
             password = form.cleaned_data["password"]
 
-            # Authenticate the user
-            user, access_token, refresh_token = authenticate_user(username, password)
-            if user:
+            # Use the same authentication endpoint used by LoginAPIView to obtain tokens
+            response = requests.post(
+                request.build_absolute_uri(reverse_lazy('api_login')),
+                data={"username": username, "password": password}
+            )
+
+            if response.status_code == status.HTTP_200_OK:
+                data = response.json()
+                access_token = data["access_token"]
+                refresh_token = data["refresh_token"]
+
+                # Determine the redirect URL
                 if next_url == "FarmCalendar":
                     next_url = settings.AVAILABLE_SERVICES.get(next_url, {}).get('post_auth')
                 elif not next_url:
@@ -51,12 +63,14 @@ class LoginView(FormView):
                 query = parse_qs(url_parts[4])  # Parse the existing query string
 
                 query["access_token"] = access_token
+                query["refresh_token"] = refresh_token
                 url_parts[4] = urlencode(query, doseq=True)
 
                 # Final redirect URL with tokens
                 redirect_url = urlunparse(url_parts)
 
                 return HttpResponseRedirect(redirect_url)
+
             else:
                 form.add_error(None, "Invalid credentials")
 
@@ -104,5 +118,7 @@ class RegisterView(FormView):
 
             except forms.ValidationError as e:
                 form.add_error(None, str(e))
+            except Exception as e:
+                form.add_error(None, f"An unexpected error occurred: {str(e)}")
 
         return self.render_to_response(self.get_context_data(form=form))

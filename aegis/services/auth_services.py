@@ -24,6 +24,7 @@ def register_user(username, email, password, first_name='', last_name=''):
     except IntegrityError:
         raise ValidationError("Username or email already exists")
 
+
 def authenticate_user(username: str, password: str):
     try:
         user = DefaultAuthUserExtend.objects.get(username=username, status=1)

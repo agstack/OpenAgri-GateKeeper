@@ -12,36 +12,41 @@ from rest_framework import status, permissions
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
+from rest_framework_simplejwt.views import TokenObtainPairView
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from aegis.forms import UserRegistrationForm
 from aegis.services.auth_services import register_user, authenticate_user
+from aegis.serializers import CustomTokenObtainPairSerializer
 
 
 @method_decorator(never_cache, name='dispatch')
-class LoginAPIView(APIView):
-    permission_classes = [permissions.AllowAny]
-    authentication_classes = []
+class LoginAPIView(TokenObtainPairView):
+    serializer_class = CustomTokenObtainPairSerializer
 
-    def post(self, request):
-        username = request.data.get("username")
-        password = request.data.get("password")
-
-        user, access_token, refresh_token = authenticate_user(username, password)
-
-        if user:
-            return Response({
-                "success": True,
-                "access_token": access_token,
-                "refresh_token": refresh_token
-            }, status=status.HTTP_200_OK)
-
-        return Response({
-            "success": False,
-            "error": "Invalid credentials"
-        }, status=status.HTTP_401_UNAUTHORIZED)
+    # permission_classes = [permissions.AllowAny]
+    # authentication_classes = []
+    #
+    # def post(self, request):
+    #     username = request.data.get("username")
+    #     password = request.data.get("password")
+    #
+    #     user, access_token, refresh_token = authenticate_user(username, password)
+    #
+    #     if user:
+    #         return Response({
+    #             "success": True,
+    #             "access_token": access_token,
+    #             "refresh_token": refresh_token
+    #         }, status=status.HTTP_200_OK)
+    #
+    #     return Response({
+    #         "success": False,
+    #         "error": "Invalid credentials"
+    #     }, status=status.HTTP_401_UNAUTHORIZED)
 
 
 @method_decorator(never_cache, name='dispatch')
@@ -71,6 +76,11 @@ class RegisterAPIView(APIView):
                     "success": False,
                     "error": str(e)
                 }, status=status.HTTP_400_BAD_REQUEST)
+            except Exception as e:
+                return Response({
+                    "success": False,
+                    "error": f"An unexpected error occurred: {str(e)}"
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         # Return validation errors
         return Response({
@@ -126,7 +136,7 @@ class TokenValidationAPIView(APIView):
                             status=status.HTTP_400_BAD_REQUEST)
 
         # Calculate remaining time (in seconds)
-        current_time = datetime.utcnow()
+        current_time = datetime.now(timezone.utc)
         remaining_time = expiration_time - current_time.timestamp()
 
         if remaining_time > 0:
