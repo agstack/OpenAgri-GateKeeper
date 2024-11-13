@@ -21,6 +21,6 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         # Customize response
         return {
             "success": True,
-            "access_token": data["access"],
-            "refresh_token": data["refresh"]
+            "access": data["access"],
+            "refresh": data["refresh"]
         }

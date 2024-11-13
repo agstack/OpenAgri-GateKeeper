@@ -45,13 +45,11 @@ urlpatterns = [
     path('api/logout/', LogoutAPIView.as_view(), name='api_logout'),
     path('api/register/', RegisterAPIView.as_view(), name='api_register'),
     path('api/validate_token/', TokenValidationAPIView.as_view(), name='validate_token'),
+    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
     path('api/register_service/', RegisterServiceAPIView.as_view(), name='register_service'),
     path('api/service_directory/', ServiceDirectoryAPIView.as_view(), name='service_directory'),
     path('api/delete_service/', DeleteServiceAPIView.as_view(), name='delete_service'),
-
-    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
     re_path(r'^api/resources/(?P<path>.*)$', ReverseProxyAPIView.as_view(), name='reverse_proxy'),
     path('aegis/', include('aegis.urls', namespace='aegis')),

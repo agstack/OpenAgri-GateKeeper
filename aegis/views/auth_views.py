@@ -14,7 +14,7 @@ from rest_framework import status
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
 
 from aegis.forms import UserRegistrationForm, UserLoginForm
-from aegis.services.auth_services import register_user, authenticate_user
+from aegis.services.auth_services import register_user
 
 
 @method_decorator(never_cache, name='dispatch')
@@ -49,8 +49,8 @@ class LoginView(FormView):
 
             if response.status_code == status.HTTP_200_OK:
                 data = response.json()
-                access_token = data["access_token"]
-                refresh_token = data["refresh_token"]
+                access_token = data["access"]
+                refresh_token = data["refresh"]
 
                 # Determine the redirect URL
                 if next_url == "FarmCalendar":
@@ -63,7 +63,7 @@ class LoginView(FormView):
                 query = parse_qs(url_parts[4])  # Parse the existing query string
 
                 query["access_token"] = access_token
-                query["refresh_token"] = refresh_token
+                query["refresh"] = refresh_token
                 url_parts[4] = urlencode(query, doseq=True)
 
                 # Final redirect URL with tokens
@@ -104,7 +104,6 @@ class RegisterView(FormView):
                     username=form.cleaned_data["username"],
                     email=form.cleaned_data["email"],
                     password=form.cleaned_data["password"],
-                    # contact_no=form.cleaned_data["contact_no"],
                     first_name=form.cleaned_data["first_name"],
                     last_name=form.cleaned_data["last_name"]
                 )
