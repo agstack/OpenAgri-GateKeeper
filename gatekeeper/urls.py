@@ -13,6 +13,7 @@ from aegis.views.api.auth_views import (LoginAPIView, LogoutAPIView, RegisterAPI
                                         ReverseProxyAPIView)
 from aegis.views.api.service_registry_views import (ServiceDirectoryAPIView, RegisterServiceAPIView,
                                                     DeleteServiceAPIView)
+from .views import GatewayAPIView
 from .common import custom_page_not_found_view
 
 
@@ -53,6 +54,11 @@ urlpatterns = [
 
     re_path(r'^api/resources/(?P<path>.*)$', ReverseProxyAPIView.as_view(), name='reverse_proxy'),
     path('aegis/', include('aegis.urls', namespace='aegis')),
+
+    path('api/test_gateway/', GatewayAPIView.as_view(), name='test_gateway'),
+
+    # Catch-all route for GatewayAPIView
+    re_path(r"^api/(?P<path>.*)$", GatewayAPIView.as_view(), name="gateway")
 ]
 
 if settings.DEBUG:

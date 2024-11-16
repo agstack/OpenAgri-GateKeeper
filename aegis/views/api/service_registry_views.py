@@ -2,6 +2,7 @@
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, DatabaseError
+from django.db.models import Q
 from django.http import JsonResponse
 from django.utils import timezone
 
@@ -10,14 +11,17 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from aegis.models import RegisteredService
+from aegis.utils.service_utils import match_endpoint
 
 
 class RegisterServiceAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        base_url = request.data.get("base_url").strip()
         service_name = request.data.get("service_name").strip()
         endpoint = request.data.get("endpoint").strip()
+        version = request.data.get("version", "v1").strip()
         methods = request.data.get("methods", ["GET", "POST"])
         params = request.data.get("params", {})
 
@@ -33,38 +37,46 @@ class RegisterServiceAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # Construct service_url
+        service_url = f"{base_url.rstrip('/')}/{service_name}/{version}/{endpoint.lstrip('/')}"
+
         try:
+            # Check for existing endpoints with dynamic segments
+            existing_services = RegisteredService.objects.filter(
+                version=version, status__in=[1, 0]
+            )
 
-            existing_endpoint = RegisteredService.objects.filter(
-                endpoint=endpoint, status__in=[1, 0]
-            ).first()
+            for existing_service in existing_services:
+                if match_endpoint(endpoint, existing_service.endpoint):
+                    existing_methods = set(existing_service.methods)
+                    requested_methods = set(methods)
 
-            if existing_endpoint:
-                existing_methods = set(existing_endpoint.methods)
-                requested_methods = set(methods)
+                    if requested_methods.issubset(existing_methods):
+                        return JsonResponse(
+                            {"error": "A service with this endpoint, methods, and version already exists."},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    else:
+                        updated_methods = list(existing_methods.union(requested_methods))
+                        existing_service.methods = updated_methods
+                        existing_service.service_name = service_name
+                        existing_service.params = params
+                        existing_service.service_url = service_url
+                        existing_service.save()
+                        return JsonResponse(
+                            {"success": True, "message": "Service updated successfully with new methods.",
+                             "service_id": existing_service.id},
+                            status=status.HTTP_200_OK
+                        )
 
-                if requested_methods.issubset(existing_methods):
-                    return JsonResponse(
-                        {"error": "A service with this endpoint and methods already exists."},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
-                else:
-                    updated_methods = list(existing_methods.union(requested_methods))
-                    existing_endpoint.methods = updated_methods
-                    existing_endpoint.service_name = service_name
-                    existing_endpoint.params = params
-                    existing_endpoint.save()
-                    return JsonResponse(
-                        {"success": True, "message": "Service updated successfully with new methods.",
-                         "service_id": existing_endpoint.id},
-                        status=status.HTTP_200_OK
-                    )
-
+            # If no existing endpoint/version combination, create a new entry
             service = RegisteredService.objects.create(
                 service_name=service_name,
                 endpoint=endpoint,
                 methods=methods,
                 params=params,
+                version=version,
+                service_url=service_url
             )
             return JsonResponse(
                 {"success": True, "message": "Service registered successfully", "service_id": service.id},

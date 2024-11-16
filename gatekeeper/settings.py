@@ -82,6 +82,7 @@ THIRD_PARTY_APPS = [
     'rest_framework',
     'drf_yasg',
     'oauth2_provider',
+    'rest_framework_simplejwt.token_blacklist',
 ]
 
 INSTALLED_APPS = DEFAULT_APPS + LOCAL_APPS + THIRD_PARTY_APPS
