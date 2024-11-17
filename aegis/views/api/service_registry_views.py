@@ -105,9 +105,30 @@ class ServiceDirectoryAPIView(APIView):
 
     def get(self, request):
         try:
-            services = RegisteredService.active_objects.only("service_name", "endpoint", "methods", "params").values(
-                "service_name", "endpoint", "methods", "params"
-            )
+            # Get query parameters for filtering
+            service_name = request.data.get("service_name")
+            endpoint = request.data.get("endpoint")
+            version = request.data.get("version")
+            method = request.data.get("method")
+
+            filters = {}
+            if service_name:
+                filters["service_name__icontains"] = service_name
+            if endpoint:
+                filters["endpoint__icontains"] = endpoint
+            if version:
+                filters["version"] = version
+            if method:
+                filters["methods__icontains"] = method
+
+            # Query the database with filters (active services only)
+            services_query = RegisteredService.active_objects.filter(**filters)
+
+            # Only fetch specific fields to optimise the query
+            services = services_query.only(
+                "base_url", "service_name", "endpoint", "version", "methods", "params"
+            ).values("base_url", "service_name", "endpoint", "version", "methods", "params")
+
             return JsonResponse(list(services), safe=False, status=status.HTTP_200_OK)
 
         except DatabaseError as db_error:

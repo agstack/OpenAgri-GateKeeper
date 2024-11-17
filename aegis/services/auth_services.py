@@ -9,7 +9,7 @@ from aegis.utils.auth_utils import hash_password, verify_password
 from aegis.models import DefaultAuthUserExtend
 
 
-def register_user(username, email, password, first_name='', last_name=''):
+def register_user(username, email, password, service_name='', first_name='', last_name=''):
     try:
         hashed_password = hash_password(password)
         user = DefaultAuthUserExtend.objects.create(
@@ -17,8 +17,8 @@ def register_user(username, email, password, first_name='', last_name=''):
             last_name=last_name,
             username=username,
             email=email,
-            password=hashed_password,
-            # contact_no=contact_no
+            service_name=service_name,
+            password=hashed_password
         )
         return {"message": "User created successfully", "user_id": user.uuid}
     except IntegrityError:

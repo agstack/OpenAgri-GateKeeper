@@ -1,6 +1,8 @@
 import jwt
 import requests
 
+from datetime import datetime, timedelta
+
 from flask import Flask, jsonify, request
 
 JWT_SIGNING_KEY = "wToGB9hehaS+DdQRjbteK2QYrXOrzHQSYSGK8wrO/3k="
@@ -35,6 +37,31 @@ def validate_jwt_token():
         return {"error": "Token expired"}, 401
     except jwt.InvalidTokenError:
         return {"error": "Invalid token"}, 401
+
+@app.route('/api/farm_calendar/v1/get_tomorrow_weather', methods=['GET'])
+def get_tomorrow_weather():
+    """
+    Fetch weather data for tomorrow via Gatekeeper.
+    """
+    # Validate the token
+    decoded, status = validate_jwt_token()
+    if status != 200:
+        return jsonify(decoded), status
+
+    # Get tomorrow's date
+    tomorrow_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    # Construct Gatekeeper URL
+    gatekeeper_url = f"{GATEKEEPER_URL}/api/weather_data/v1/get_weather/{tomorrow_date}"
+
+    # Call Gatekeeper
+    try:
+        response = requests.get(gatekeeper_url, headers={"Authorization": request.headers.get("Authorization")})
+        if response.status_code == 200:
+            return jsonify({"tomorrow_weather": response.json()}), 200
+        return jsonify({"error": response.json().get("error", "Failed to fetch weather data")}), response.status_code
+    except requests.RequestException as e:
+        return jsonify({"error": f"Failed to connect to Gatekeeper: {str(e)}"}), 502
 
 # Routes
 @app.route('/api/farm_calendar/v2/get_all_farm/<int:farm_id>', methods=['GET'])

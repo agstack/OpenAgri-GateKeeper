@@ -40,11 +40,6 @@ class BaseModel(models.Model):
 
 
 class RequestLog(models.Model):
-    class Meta:
-        db_table = 'activity_log'
-        verbose_name = 'Activity Log'
-        verbose_name_plural = 'Activity Logs'
-
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     ip_address = models.CharField(max_length=45)
     user_agent = models.TextField()
@@ -55,10 +50,23 @@ class RequestLog(models.Model):
     response_status = models.IntegerField()
     timestamp = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        db_table = 'activity_log'
+        verbose_name = 'Activity Log'
+        verbose_name_plural = 'Activity Logs'
+
 
 class DefaultAuthUserExtend(AbstractUser, BaseModel):
+    SERVICE_NAME_CHOICES = [
+        ('farm_calendar', 'Farm Calendar'),
+        ('gatekeeper', 'Gatekeeper'),
+        ('weather_data', 'Weather Data'),
+        ('unknown', 'Unknown'),
+    ]
+
     uuid = models.UUIDField(unique=True, default=uuid.uuid4, editable=False)
     email = models.EmailField(unique=True)
+    service_name = models.CharField(max_length=50, default='unknown', choices=SERVICE_NAME_CHOICES,)
     contact_no = models.CharField(max_length=10, null=True, db_index=True, default='', blank=True,
                                   validators=[RegexValidator(regex=r'^[0-9- ]+$', message="Invalid phone number")])
     token_version = models.IntegerField(default=1)

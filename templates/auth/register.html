@@ -2,6 +2,17 @@
 {% load static %}
 {% load crispy_forms_tags %}
 {% block title %}Register{% endblock title %}
+{% block extra_css %}
+<style>
+    .form-group .invalid-feedback {
+        margin-top: -8px;
+    }
+
+    .form-group.is-invalid {
+        margin-bottom: 1rem; /* Reduce spacing for the group when invalid */
+    }
+</style>
+{% endblock extra_css %}
 {% block content %}
 <div class="auth-full-page-content d-flex p-sm-5 p-4">
     <div class="w-100">
