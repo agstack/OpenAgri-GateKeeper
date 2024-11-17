@@ -35,7 +35,9 @@
                     </div>
                 </form>
                 <div class="mt-4 text-center">
-                    <p>Already have an account? <a href="{% url 'login' %}" class="text-primary">Login</a></p>
+                    <p>Already have an account?
+                        <a href="{% url 'login' %}?next={{ request.GET.next|default:'' }}" class="text-primary">Login</a>
+                    </p>
                 </div>
             </div>
             <div class="mt-4 mt-md-5 text-center">

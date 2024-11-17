@@ -100,7 +100,7 @@ class UserLoginForm(forms.Form):
     username = forms.CharField(
         widget=forms.TextInput(attrs={
             "class": "form-floating form-floating-custom mb-3 textinput form-control",
-            "placeholder": "Username (Required)"
+            "placeholder": "Username or Email (Required)"
         }),
         label="",
         help_text="",
