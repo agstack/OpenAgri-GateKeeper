@@ -40,12 +40,12 @@ class LoginView(FormView):
         if form.is_valid():
             username = form.cleaned_data["username"]
             password = form.cleaned_data["password"]
-            service_name = form.cleaned_data["service_name"]
+            # service_name = form.cleaned_data["service_name"]
 
             # Use the same authentication endpoint used by LoginAPIView to obtain tokens
             response = requests.post(
                 request.build_absolute_uri(reverse_lazy('api_login')),
-                data={"username": username, "password": password, "service_name": service_name}
+                data={"username": username, "password": password}
             )
 
             if response.status_code == status.HTTP_200_OK:
@@ -107,7 +107,7 @@ class RegisterView(FormView):
                     password=form.cleaned_data["password"],
                     first_name=form.cleaned_data["first_name"],
                     last_name=form.cleaned_data["last_name"],
-                    service_name=form.cleaned_data["service_name"],
+                    # service_name=form.cleaned_data["service_name"],
                 )
 
                 if next_url:

@@ -5,8 +5,6 @@ from datetime import datetime, timedelta
 
 from flask import Flask, jsonify, request
 
-# from apscheduler.schedulers.background import BackgroundScheduler
-
 JWT_SIGNING_KEY = "wToGB9hehaS+DdQRjbteK2QYrXOrzHQSYSGK8wrO/3k="
 
 

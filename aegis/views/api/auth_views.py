@@ -41,7 +41,7 @@ class RegisterAPIView(APIView):
                 register_user(
                     username=form.cleaned_data["username"],
                     email=form.cleaned_data["email"],
-                    service_name=form.cleaned_data["service_name"],
+                    # service_name=form.cleaned_data["service_name"],
                     password=form.cleaned_data["password"],
                     first_name=form.cleaned_data["first_name"],
                     last_name=form.cleaned_data["last_name"]
