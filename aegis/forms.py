@@ -59,14 +59,14 @@ class UserRegistrationForm(forms.ModelForm):
         help_text="",
     )
 
-    service_name = forms.ChoiceField(
-        widget=forms.Select(attrs={
-            "class": "form-floating form-floating-custom mb-3 select form-control",
-        }),
-        choices=[('', 'Please select service type (Required)')] + DefaultAuthUserExtend.SERVICE_NAME_CHOICES,
-        label="",
-        required=True,
-    )
+    # service_name = forms.ChoiceField(
+    #     widget=forms.Select(attrs={
+    #         "class": "form-floating form-floating-custom mb-3 select form-control",
+    #     }),
+    #     choices=[('', 'Please select service type (Required)')] + DefaultAuthUserExtend.SERVICE_NAME_CHOICES,
+    #     label="",
+    #     required=True,
+    # )
 
     class Meta:
         model = DefaultAuthUserExtend
@@ -114,3 +114,12 @@ class UserLoginForm(forms.Form):
         }),
         label=""
     )
+
+    # service_name = forms.ChoiceField(
+    #     widget=forms.Select(attrs={
+    #         "class": "form-floating form-floating-custom mb-3 select form-control",
+    #     }),
+    #     choices=[('', 'Please select service type (Required)')] + DefaultAuthUserExtend.SERVICE_NAME_CHOICES,
+    #     label="",
+    #     required=True,
+    # )

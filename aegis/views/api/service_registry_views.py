@@ -1,9 +1,12 @@
 # aegis/views/api/service_registry_views.py
 
+import re
+import requests
+
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, DatabaseError
 from django.db.models import Q
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.utils import timezone
 
 from rest_framework import status
@@ -18,6 +21,16 @@ class RegisterServiceAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        # Validate required fields
+        required_fields = ["base_url", "service_name", "endpoint"]
+        missing_fields = [field for field in required_fields if not request.data.get(field)]
+
+        if missing_fields:
+            return JsonResponse(
+                {"error": f"Missing required fields: {', '.join(missing_fields)}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         base_url = request.data.get("base_url").strip()
         service_name = request.data.get("service_name").strip()
         endpoint = request.data.get("endpoint").strip()
@@ -41,9 +54,11 @@ class RegisterServiceAPIView(APIView):
         service_url = f"{base_url.rstrip('/')}/{service_name}/{version}/{endpoint.lstrip('/')}"
 
         try:
-            # Check for existing endpoints with dynamic segments
+            # Check for existing services with the same base_url, endpoint, and version
             existing_services = RegisteredService.objects.filter(
-                version=version, status__in=[1, 0]
+                base_url=base_url,
+                version=version,
+                status__in=[1, 0]  # Active or inactive services
             )
 
             for existing_service in existing_services:
@@ -51,13 +66,16 @@ class RegisterServiceAPIView(APIView):
                     existing_methods = set(existing_service.methods)
                     requested_methods = set(methods)
 
+                    # Check if all requested methods are already registered
                     if requested_methods.issubset(existing_methods):
                         return JsonResponse(
-                            {"error": "A service with this endpoint, methods, and version already exists."},
+                            {"error": "A service with this base url, endpoint, methods, and version already exists."},
                             status=status.HTTP_400_BAD_REQUEST
                         )
                     else:
+                        # Update service with new methods
                         updated_methods = list(existing_methods.union(requested_methods))
+                        existing_service.base_url = base_url
                         existing_service.methods = updated_methods
                         existing_service.service_name = service_name
                         existing_service.params = params
@@ -71,6 +89,7 @@ class RegisterServiceAPIView(APIView):
 
             # If no existing endpoint/version combination, create a new entry
             service = RegisteredService.objects.create(
+                base_url=base_url,
                 service_name=service_name,
                 endpoint=endpoint,
                 methods=methods,
@@ -106,10 +125,10 @@ class ServiceDirectoryAPIView(APIView):
     def get(self, request):
         try:
             # Get query parameters for filtering
-            service_name = request.data.get("service_name")
-            endpoint = request.data.get("endpoint")
-            version = request.data.get("version")
-            method = request.data.get("method")
+            service_name = request.query_params.get("service_name", "").strip() or None
+            endpoint = request.query_params.get("endpoint", "").strip() or None
+            version = request.query_params.get("version", "").strip() or None
+            method = request.query_params.get("method", "").strip() or None
 
             filters = {}
             if service_name:
@@ -126,8 +145,8 @@ class ServiceDirectoryAPIView(APIView):
 
             # Only fetch specific fields to optimise the query
             services = services_query.only(
-                "base_url", "service_name", "endpoint", "version", "methods", "params"
-            ).values("base_url", "service_name", "endpoint", "version", "methods", "params")
+                "base_url", "service_name", "endpoint", "version", "methods", "params", "service_url"
+            ).values("base_url", "service_name", "endpoint", "version", "methods", "params", "service_url")
 
             return JsonResponse(list(services), safe=False, status=status.HTTP_200_OK)
 
@@ -147,40 +166,47 @@ class DeleteServiceAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def delete(self, request):
+        base_url = request.query_params.get("base_url")
         service_name = request.query_params.get("service_name")
         endpoint = request.query_params.get("endpoint")
+        version = request.query_params.get("version")
         method = request.query_params.get("method")
 
-        if not service_name or not endpoint:
+        if not service_name or not endpoint or not base_url or not version:
             return JsonResponse(
-                {"error": "Service name and endpoint are required."},
+                {"error": "Base URL, service name, endpoint, and version are required."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         try:
-            service = RegisteredService.objects.filter(service_name=service_name, endpoint=endpoint, status__in=[1, 0]).first()
+            service = RegisteredService.objects.filter(
+                base_url=base_url, service_name=service_name, endpoint=endpoint, version=version, status__in=[1, 0]
+            ).first()
 
             if not service:
                 return JsonResponse(
-                    {"error": "Service with this name and endpoint does not exist or is already deleted."},
+                    {"error": "Service with this base URL, name, endpoint, and version does not exist or is already deleted."},
                     status=status.HTTP_404_NOT_FOUND
                 )
 
+            # If no method is provided, mark the service as deleted
             if not method:
                 service.status = 2
                 service.deleted_at = timezone.now()
                 service.save()
                 return JsonResponse(
-                    {"success": True, "message": "Service and endpoint deleted successfully."},
+                    {"success": True, "message": "Base URL, service and endpoint deleted successfully."},
                     status=status.HTTP_200_OK
                 )
 
+            # Check if the provided method exists for the service
             if method not in service.methods:
                 return JsonResponse(
                     {"error": f"Method '{method}' does not exist for this endpoint."},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
+            # Remove the method from the service
             updated_methods = [m for m in service.methods if m != method]
             service.methods = updated_methods
             service.save()
@@ -200,3 +226,112 @@ class DeleteServiceAPIView(APIView):
                 {"error": f"Unexpected error: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class NewReverseProxyAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def dispatch_request(self, request, path):
+        try:
+            print(path)
+            # Parse the path to determine service and endpoint
+            path_parts = path.split('/')
+            version = path_parts[1] if len(path_parts) > 1 and path_parts[1].startswith("v") else None
+            # service_name = path_parts[0] if path_parts else None
+            service_name = path_parts[0] if len(path_parts) > 0 else None
+            endpoint = '/'.join(path_parts[1:]) if len(path_parts) > 1 else None
+
+            if not service_name or not endpoint:
+                return JsonResponse({'error': 'Invalid path format.'}, status=400)
+
+            # Query the database for matching service and endpoint pattern
+            service_entry = None
+            services = RegisteredService.objects.filter(service_name=service_name, status=1)
+
+            # If version is not provided, select the latest version
+            if not version:
+                latest_version = sorted(
+                    services.values_list("version", flat=True),
+                    reverse=True
+                )[0]  # Get the latest version
+                version = latest_version
+                print(f"No version provided. Using the latest available version: {version}")
+
+            # Filter by service name and version
+            for service in services.filter(version=version):
+                # Ensure service.endpoint is valid
+                if not service.endpoint:
+                    continue
+
+                # Convert placeholders in the stored endpoint to a regex pattern
+                try:
+                    pattern = re.sub(r"\{[^\}]+\}", r"[^/]+", service.endpoint)  # Convert {param} to regex
+                except Exception as e:
+                    print(f"Error creating regex pattern for endpoint {service.endpoint}: {e}")
+                    continue
+
+                # Ensure endpoint is a valid string before matching
+                if endpoint is None or not isinstance(endpoint, str):
+                    print(f"Invalid endpoint in request: {endpoint}")
+                    continue
+
+                # Match the incoming endpoint to the regex pattern
+                if re.fullmatch(pattern, endpoint):
+                    service_entry = service
+                    break
+
+            if not service_entry:
+                return JsonResponse({'error': 'No service can provide this resource.'}, status=404)
+
+            # Replace placeholders in the stored endpoint with actual values from the request
+            resolved_endpoint = service_entry.endpoint
+            for part, placeholder in zip(endpoint.split('/'), resolved_endpoint.split('/')):
+                if placeholder.startswith("{") and placeholder.endswith("}"):
+                    resolved_endpoint = resolved_endpoint.replace(placeholder, part)
+
+            # Check if the method is supported
+            if request.method not in service_entry.methods:
+                return JsonResponse(
+                    {'error': f"Method {request.method} not allowed for this endpoint."},
+                    status=405
+                )
+
+            # Construct the target service URL
+            url = f"{service_entry.base_url.rstrip('/')}/api/{service_entry.service_name}/{version}/{resolved_endpoint.lstrip('/')}"
+            print(f"Forwarding request to: {url}")
+            headers = {key: value for key, value in request.headers.items() if key.lower() != 'host'}
+            data = request.body
+
+            # Forward the request based on the HTTP method
+            if request.method == 'GET':
+                response = requests.get(url, headers=headers, params=request.GET)
+            elif request.method == 'POST':
+                response = requests.post(url, headers=headers, data=data)
+            elif request.method == 'PUT':
+                response = requests.put(url, headers=headers, data=data)
+            elif request.method == 'DELETE':
+                response = requests.delete(url, headers=headers, data=data)
+            else:
+                return JsonResponse({'error': 'Unsupported HTTP method.'}, status=405)
+
+            # Return the response from the proxied service
+            return HttpResponse(
+                response.content,
+                status=response.status_code,
+                content_type=response.headers.get('Content-Type', 'application/json')
+            )
+
+        except Exception as e:
+            return JsonResponse({'error': f"Internal server error: {str(e)}"}, status=500)
+
+    def get(self, request, path):
+        return self.dispatch_request(request, path)
+
+    def post(self, request, path):
+        return self.dispatch_request(request, path)
+
+    def put(self, request, path):
+        return self.dispatch_request(request, path)
+
+    def delete(self, request, path):
+        return self.dispatch_request(request, path)

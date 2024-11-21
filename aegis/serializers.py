@@ -14,17 +14,17 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         token["email"] = user.email
         token["first_name"] = user.first_name
         token["last_name"] = user.last_name
-        token["service_name"] = user.service_name
+        # token["service_name"] = user.service_name
         token["uuid"] = str(user.uuid)
         return token
 
     def validate(self, attrs):
         # Extract username/email and service_name from the request data
         login_identifier = attrs.get("username")  # Can be either username or email
-        service_name = self.context["request"].data.get("service_name")
+        # service_name = self.context["request"].data.get("service_name")
 
-        if not service_name:
-            raise AuthenticationFailed("Service name is required.")
+        # if not service_name:
+        #     raise AuthenticationFailed("Service name is required.")
 
         # Get the user model
         user_model = get_user_model()
@@ -34,7 +34,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             user = user_model.objects.filter(
                 Q(username=login_identifier) | Q(email=login_identifier),
                 status=1,  # Ensure user is active
-                service_name=service_name
+                # service_name=service_name
             ).first()
         except user_model.DoesNotExist:
             raise AuthenticationFailed("No active account found with the given credentials")

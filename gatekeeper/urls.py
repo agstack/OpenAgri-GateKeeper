@@ -12,7 +12,7 @@ from aegis.views.auth_views import LoginView, RegisterView
 from aegis.views.api.auth_views import (LoginAPIView, LogoutAPIView, RegisterAPIView, TokenValidationAPIView,
                                         ReverseProxyAPIView)
 from aegis.views.api.service_registry_views import (ServiceDirectoryAPIView, RegisterServiceAPIView,
-                                                    DeleteServiceAPIView)
+                                                    DeleteServiceAPIView, NewReverseProxyAPIView)
 from .views import GatewayAPIView
 from .common import custom_page_not_found_view
 
@@ -51,6 +51,8 @@ urlpatterns = [
     path('api/register_service/', RegisterServiceAPIView.as_view(), name='register_service'),
     path('api/service_directory/', ServiceDirectoryAPIView.as_view(), name='service_directory'),
     path('api/delete_service/', DeleteServiceAPIView.as_view(), name='delete_service'),
+
+    re_path(r'^api/proxy/(?P<path>.*)$', NewReverseProxyAPIView.as_view(), name='new_reverse_proxy'),
 
     re_path(r'^api/resources/(?P<path>.*)$', ReverseProxyAPIView.as_view(), name='reverse_proxy'),
     path('aegis/', include('aegis.urls', namespace='aegis')),
