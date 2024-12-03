@@ -66,7 +66,7 @@ class DefaultAuthUserExtend(AbstractUser, BaseModel):
 
     uuid = models.UUIDField(unique=True, default=uuid.uuid4, editable=False)
     email = models.EmailField(unique=True)
-    service_name = models.CharField(max_length=50, default='unknown', choices=SERVICE_NAME_CHOICES,)
+    # service_name = models.CharField(max_length=50, default='unknown', choices=SERVICE_NAME_CHOICES,)
     contact_no = models.CharField(max_length=10, null=True, db_index=True, default='', blank=True,
                                   validators=[RegexValidator(regex=r'^[0-9- ]+$', message="Invalid phone number")])
     token_version = models.IntegerField(default=1)

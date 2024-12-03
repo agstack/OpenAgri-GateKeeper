@@ -5,6 +5,7 @@
 **/.idea/
 **/staticfiles/
 **/assets/
+keys/
 
 # Files
 .env

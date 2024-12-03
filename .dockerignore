@@ -5,6 +5,7 @@
 **/assets/
 **/staticfiles/
 **/mysql_docker/
+keys/
 
 .yarnrc.yml
 README.md

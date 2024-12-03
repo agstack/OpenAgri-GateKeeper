@@ -8,6 +8,7 @@ from drf_yasg import openapi
 from rest_framework import permissions
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
+from aegis.views.home_view import HomeView
 from aegis.views.auth_views import LoginView, RegisterView
 from aegis.views.api.auth_views import (LoginAPIView, LogoutAPIView, RegisterAPIView, TokenValidationAPIView,
                                         ReverseProxyAPIView)
@@ -36,6 +37,10 @@ urlpatterns = [
     re_path(r'^swagger(?P<format>\.json|\.yaml)$', schema_view.without_ui(cache_timeout=0), name='schema-json'),
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
+
+    path('o/', include('oauth2_provider.urls', namespace='oauth2_provider')),
+
+    path('', HomeView.as_view(), name='home'),
 
     path('admin/', admin.site.urls),
 
