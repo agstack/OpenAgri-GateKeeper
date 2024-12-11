@@ -89,8 +89,8 @@ class RegisteredService(BaseModel):
     service_name = models.CharField(max_length=100)
     endpoint = models.CharField(max_length=255)
     methods = models.JSONField()
-    version = models.CharField(max_length=10, default="v1")
-    params = models.JSONField()
+    params = models.TextField(max_length=100, blank=True, null=True, help_text="Query parameter templates (e.g., 'lat={}&lon={}').")
+    comments = models.TextField(blank=True, null=True)
     service_url = models.CharField(max_length=500, blank=True, null=True)
 
     history = HistoricalRecords(table_name="registered_services_history")

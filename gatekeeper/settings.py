@@ -225,8 +225,8 @@ AUTH_USER_MODEL = 'aegis.DefaultAuthUserExtend'
 DJANGO_PORT = os.getenv('APP_PORT', '8001')
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=10080),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=365),
     'ROTATE_REFRESH_TOKENS': False,
     'BLACKLIST_AFTER_ROTATION': True,
     'UPDATE_LAST_LOGIN': True,
@@ -317,3 +317,5 @@ LOGGING = {
 }
 
 FARM_CALENDAR = os.getenv('FARM_CALENDAR')
+
+GATEKEEPER_URL = os.getenv('GATEKEEPER_URL')

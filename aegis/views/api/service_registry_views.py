@@ -3,6 +3,7 @@
 import re
 import requests
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, DatabaseError
 from django.db.models import Q
@@ -12,6 +13,8 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
+
+from urllib.parse import urlencode
 
 from aegis.models import RegisteredService
 from aegis.utils.service_utils import match_endpoint
@@ -34,9 +37,8 @@ class RegisterServiceAPIView(APIView):
         base_url = request.data.get("base_url").strip()
         service_name = request.data.get("service_name").strip()
         endpoint = request.data.get("endpoint").strip()
-        version = request.data.get("version", "v1").strip()
         methods = request.data.get("methods", ["GET", "POST"])
-        params = request.data.get("params", {})
+        params = request.data.get("params", "")
 
         if not service_name or not endpoint:
             return JsonResponse(
@@ -50,14 +52,19 @@ class RegisterServiceAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        if not isinstance(params, str):
+            return JsonResponse(
+                {"error": "Params should be a string representing query parameters."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         # Construct service_url
-        service_url = f"{base_url.rstrip('/')}/{service_name}/{version}/{endpoint.lstrip('/')}"
+        query_string = f"?{params}" if params else ""
+        service_url = f"{settings.GATEKEEPER_URL.rstrip('/')}/api/proxy/{service_name}/{endpoint.lstrip('/')}{query_string}"
 
         try:
-            # Check for existing services with the same base_url, endpoint, and version
+            # Check for existing services with the same base_url and endpoint
             existing_services = RegisteredService.objects.filter(
                 base_url=base_url,
-                version=version,
                 status__in=[1, 0]  # Active or inactive services
             )
 
@@ -69,7 +76,7 @@ class RegisterServiceAPIView(APIView):
                     # Check if all requested methods are already registered
                     if requested_methods.issubset(existing_methods):
                         return JsonResponse(
-                            {"error": "A service with this base url, endpoint, methods, and version already exists."},
+                            {"error": "A service with this base url, endpoint, and methods already exists."},
                             status=status.HTTP_400_BAD_REQUEST
                         )
                     else:
@@ -87,14 +94,13 @@ class RegisterServiceAPIView(APIView):
                             status=status.HTTP_200_OK
                         )
 
-            # If no existing endpoint/version combination, create a new entry
+            # If no existing endpoint combination, create a new entry
             service = RegisteredService.objects.create(
                 base_url=base_url,
                 service_name=service_name,
                 endpoint=endpoint,
                 methods=methods,
                 params=params,
-                version=version,
                 service_url=service_url
             )
             return JsonResponse(
@@ -127,7 +133,6 @@ class ServiceDirectoryAPIView(APIView):
             # Get query parameters for filtering
             service_name = request.query_params.get("service_name", "").strip() or None
             endpoint = request.query_params.get("endpoint", "").strip() or None
-            version = request.query_params.get("version", "").strip() or None
             method = request.query_params.get("method", "").strip() or None
 
             filters = {}
@@ -135,8 +140,6 @@ class ServiceDirectoryAPIView(APIView):
                 filters["service_name__icontains"] = service_name
             if endpoint:
                 filters["endpoint__icontains"] = endpoint
-            if version:
-                filters["version"] = version
             if method:
                 filters["methods__icontains"] = method
 
@@ -145,8 +148,8 @@ class ServiceDirectoryAPIView(APIView):
 
             # Only fetch specific fields to optimise the query
             services = services_query.only(
-                "base_url", "service_name", "endpoint", "version", "methods", "params", "service_url"
-            ).values("base_url", "service_name", "endpoint", "version", "methods", "params", "service_url")
+                "base_url", "service_name", "endpoint", "methods", "params", "comments", "service_url"
+            ).values("base_url", "service_name", "endpoint", "methods", "params", "comments", "service_url")
 
             return JsonResponse(list(services), safe=False, status=status.HTTP_200_OK)
 
@@ -169,23 +172,22 @@ class DeleteServiceAPIView(APIView):
         base_url = request.query_params.get("base_url")
         service_name = request.query_params.get("service_name")
         endpoint = request.query_params.get("endpoint")
-        version = request.query_params.get("version")
         method = request.query_params.get("method")
 
-        if not service_name or not endpoint or not base_url or not version:
+        if not service_name or not endpoint or not base_url:
             return JsonResponse(
-                {"error": "Base URL, service name, endpoint, and version are required."},
+                {"error": "Base URL, service name, and endpoint are required."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         try:
             service = RegisteredService.objects.filter(
-                base_url=base_url, service_name=service_name, endpoint=endpoint, version=version, status__in=[1, 0]
+                base_url=base_url, service_name=service_name, endpoint=endpoint, status__in=[1, 0]
             ).first()
 
             if not service:
                 return JsonResponse(
-                    {"error": "Service with this base URL, name, endpoint, and version does not exist or is already deleted."},
+                    {"error": "Service with this base URL, name, and endpoint does not exist or is already deleted."},
                     status=status.HTTP_404_NOT_FOUND
                 )
 
@@ -236,8 +238,6 @@ class NewReverseProxyAPIView(APIView):
             print(path)
             # Parse the path to determine service and endpoint
             path_parts = path.split('/')
-            version = path_parts[1] if len(path_parts) > 1 and path_parts[1].startswith("v") else None
-            # service_name = path_parts[0] if path_parts else None
             service_name = path_parts[0] if len(path_parts) > 0 else None
             endpoint = '/'.join(path_parts[1:]) if len(path_parts) > 1 else None
 
@@ -248,17 +248,8 @@ class NewReverseProxyAPIView(APIView):
             service_entry = None
             services = RegisteredService.objects.filter(service_name=service_name, status=1)
 
-            # If version is not provided, select the latest version
-            if not version:
-                latest_version = sorted(
-                    services.values_list("version", flat=True),
-                    reverse=True
-                )[0]  # Get the latest version
-                version = latest_version
-                print(f"No version provided. Using the latest available version: {version}")
-
-            # Filter by service name and version
-            for service in services.filter(version=version):
+            # Filter by service name
+            for service in services.filter():
                 # Ensure service.endpoint is valid
                 if not service.endpoint:
                     continue
@@ -297,7 +288,7 @@ class NewReverseProxyAPIView(APIView):
                 )
 
             # Construct the target service URL
-            url = f"{service_entry.base_url.rstrip('/')}/api/{service_entry.service_name}/{version}/{resolved_endpoint.lstrip('/')}"
+            url = f"{service_entry.base_url.rstrip('/')}/api/proxy/{service_entry.service_name}/{resolved_endpoint.lstrip('/')}"
             print(f"Forwarding request to: {url}")
             headers = {key: value for key, value in request.headers.items() if key.lower() != 'host'}
             data = request.body
