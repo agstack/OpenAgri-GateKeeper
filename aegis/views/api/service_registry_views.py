@@ -57,9 +57,20 @@ class RegisterServiceAPIView(APIView):
                 {"error": "Params should be a string representing query parameters."},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        # Ensure consistent formatting (always include trailing slash for endpoint)
+        endpoint = endpoint.rstrip('/') + '/'  # Ensure trailing slash for endpoint
+
         # Construct service_url
-        query_string = f"?{params}" if params else ""
-        service_url = f"{settings.GATEKEEPER_URL.rstrip('/')}/api/proxy/{service_name}/{endpoint.lstrip('/')}{query_string}"
+        if params:
+            params = params.strip()  # Remove unnecessary leading/trailing spaces
+            key_value_pairs = [pair.strip() for pair in params.split('&') if '=' in pair]  # Split and validate
+            query_string = f"?{'&'.join(key_value_pairs)}" if key_value_pairs else ""
+        else:
+            query_string = ""
+
+        # Final service_url
+        service_url = f"{settings.GATEKEEPER_URL.rstrip('/')}/api/proxy/{service_name}/{endpoint}{query_string}"
 
         try:
             # Check for existing services with the same base_url and endpoint
