@@ -81,29 +81,21 @@ class RegisterServiceAPIView(APIView):
 
             for existing_service in existing_services:
                 if match_endpoint(endpoint, existing_service.endpoint):
-                    existing_methods = set(existing_service.methods)
-                    requested_methods = set(methods)
+                    # Update the existing service with new data
+                    existing_service.base_url = base_url
+                    existing_service.service_name = service_name
+                    existing_service.endpoint = endpoint
+                    existing_service.methods = list(set(existing_service.methods).union(methods))  # Merge methods
+                    existing_service.params = params  # Update params
+                    existing_service.comments = request.data.get("comments", existing_service.comments)  # Update comments
+                    existing_service.service_url = service_url  # Update the service URL
+                    existing_service.save()
 
-                    # Check if all requested methods are already registered
-                    if requested_methods.issubset(existing_methods):
-                        return JsonResponse(
-                            {"error": "A service with this base url, endpoint, and methods already exists."},
-                            status=status.HTTP_400_BAD_REQUEST
-                        )
-                    else:
-                        # Update service with new methods
-                        updated_methods = list(existing_methods.union(requested_methods))
-                        existing_service.base_url = base_url
-                        existing_service.methods = updated_methods
-                        existing_service.service_name = service_name
-                        existing_service.params = params
-                        existing_service.service_url = service_url
-                        existing_service.save()
-                        return JsonResponse(
-                            {"success": True, "message": "Service updated successfully with new methods.",
-                             "service_id": existing_service.id},
-                            status=status.HTTP_200_OK
-                        )
+                    return JsonResponse(
+                        {"success": True, "message": "Service updated successfully.",
+                         "service_id": existing_service.id},
+                        status=status.HTTP_200_OK
+                    )
 
             # If no existing endpoint combination, create a new entry
             service = RegisteredService.objects.create(
@@ -112,6 +104,7 @@ class RegisterServiceAPIView(APIView):
                 endpoint=endpoint,
                 methods=methods,
                 params=params,
+                comments=request.data.get("comments", None),
                 service_url=service_url
             )
             return JsonResponse(
