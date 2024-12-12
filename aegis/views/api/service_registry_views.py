@@ -70,7 +70,7 @@ class RegisterServiceAPIView(APIView):
             query_string = ""
 
         # Final service_url
-        service_url = f"{settings.GATEKEEPER_URL.rstrip('/')}/api/proxy/{service_name}/{endpoint}{query_string}"
+        service_url = f"http://127.0.0.1:8001/api/proxy/{service_name}/{endpoint}{query_string}"
 
         try:
             # Check for existing services with the same base_url and endpoint
