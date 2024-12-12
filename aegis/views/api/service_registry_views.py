@@ -239,7 +239,8 @@ class NewReverseProxyAPIView(APIView):
 
     def dispatch_request(self, request, path):
         try:
-            print(path)
+            print(f"Incoming path: {path}")
+
             # Parse the path to determine service and endpoint
             path_parts = path.split('/')
             service_name = path_parts[0] if len(path_parts) > 0 else None
@@ -249,8 +250,10 @@ class NewReverseProxyAPIView(APIView):
                 return JsonResponse({'error': 'Invalid path format.'}, status=400)
 
             # Query the database for matching service and endpoint pattern
-            service_entry = None
             services = RegisteredService.objects.filter(service_name=service_name, status=1)
+            service_entry = None
+
+            print("services: ", services)
 
             # Filter by service name
             for service in services.filter():
@@ -258,22 +261,25 @@ class NewReverseProxyAPIView(APIView):
                 if not service.endpoint:
                     continue
 
-                # Convert placeholders in the stored endpoint to a regex pattern
-                try:
-                    pattern = re.sub(r"\{[^\}]+\}", r"[^/]+", service.endpoint)  # Convert {param} to regex
-                except Exception as e:
-                    print(f"Error creating regex pattern for endpoint {service.endpoint}: {e}")
-                    continue
+                # Check if the stored endpoint has placeholders
+                if '{' in service.endpoint and '}' in service.endpoint:
+                    # Convert placeholders to a regex pattern
+                    pattern = re.sub(r"\{[^\}]+\}", r"[^/]+", service.endpoint)
+
+                    # Match the incoming endpoint to the regex pattern
+                    if re.fullmatch(pattern, endpoint):
+                        service_entry = service
+                        break
+                else:
+                    # Direct match for endpoints without placeholders
+                    if service.endpoint.strip('/') == endpoint.strip('/'):
+                        service_entry = service
+                        break
 
                 # Ensure endpoint is a valid string before matching
                 if endpoint is None or not isinstance(endpoint, str):
                     print(f"Invalid endpoint in request: {endpoint}")
                     continue
-
-                # Match the incoming endpoint to the regex pattern
-                if re.fullmatch(pattern, endpoint):
-                    service_entry = service
-                    break
 
             if not service_entry:
                 return JsonResponse({'error': 'No service can provide this resource.'}, status=404)
@@ -291,9 +297,27 @@ class NewReverseProxyAPIView(APIView):
                     status=405
                 )
 
+            # Resolve placeholders if present
+            resolved_endpoint = service_entry.endpoint
+            if '{' in resolved_endpoint and '}' in resolved_endpoint:
+                resolved_endpoint_parts = resolved_endpoint.split('/')
+                incoming_parts = endpoint.split('/')
+
+                # Replace placeholders with actual values from the request path
+                resolved_endpoint = '/'.join(
+                    incoming if placeholder.startswith("{") and placeholder.endswith("}") else placeholder
+                    for placeholder, incoming in zip(resolved_endpoint_parts, incoming_parts)
+                )
+
             # Construct the target service URL
-            url = f"{service_entry.base_url.rstrip('/')}/api/proxy/{service_entry.service_name}/{resolved_endpoint.lstrip('/')}"
+            url = f"{service_entry.base_url.rstrip('/')}/{resolved_endpoint.lstrip('/')}"
+            query_string = request.META.get('QUERY_STRING', '')
+
+            if query_string:
+                url = f"{url}?{query_string}"
+
             print(f"Forwarding request to: {url}")
+
             headers = {key: value for key, value in request.headers.items() if key.lower() != 'host'}
             data = request.body
 

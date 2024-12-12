@@ -19,7 +19,7 @@ app.url_map.strict_slashes = False
 
 
 # Utility Functions
-def login_and_get_token(username, password, service_name):
+def login_and_get_token(username, password):
     global ACCESS_TOKEN
 
     login_url = f"{GATEKEEPER_URL}/api/login/"
@@ -28,8 +28,7 @@ def login_and_get_token(username, password, service_name):
             login_url,
             json={
                 "username": username,
-                "password": password,
-                "service_name": service_name
+                "password": password
             },
             headers={"Content-Type": "application/json"}
         )
@@ -235,13 +234,16 @@ def health_check():
 
 # Main Execution
 if __name__ == '__main__':
-    login_and_get_token(username="pranav", password="asdasdasd", service_name="farm_calendar")
+    login_and_get_token(username="pranav", password="asdasdasd")
     refresh_service_cache()
 
     print("\nCalling weather data through Gatekeeper...\n")
 
     # Construct the Gatekeeper reverse proxy URL
-    GK_PROXY_URL = f"{GATEKEEPER_URL}/api/proxy/weather_data/get_temperature/18-11-2024"
+    # GK_PROXY_URL = f"{GATEKEEPER_URL}/api/proxy/weather_data/get_temperature/18-11-2024"
+    GK_PROXY_URL = f"{GATEKEEPER_URL}/api/proxy/weather_data/api/data/thi/?lat=12.0&lon=12.0"
+    print("GK_PROXY_URL: ", GK_PROXY_URL)
+
     headers = {
         "Authorization": f"Bearer {ACCESS_TOKEN}"
     }
