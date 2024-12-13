@@ -234,7 +234,7 @@ def health_check():
 
 # Main Execution
 if __name__ == '__main__':
-    login_and_get_token(username="pranav", password="asdasdasd")
+    login_and_get_token(username="admin", password="admin")
     refresh_service_cache()
 
     print("\nCalling weather data through Gatekeeper...\n")
