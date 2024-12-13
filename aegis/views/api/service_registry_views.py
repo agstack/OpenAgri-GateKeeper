@@ -237,6 +237,11 @@ class DeleteServiceAPIView(APIView):
 class NewReverseProxyAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
+    '''
+    THINGS TO DO:
+    Remove the endpoint check from this function
+    '''
+
     def dispatch_request(self, request, path):
         try:
             print(f"Incoming path: {path}")
@@ -245,6 +250,10 @@ class NewReverseProxyAPIView(APIView):
             path_parts = path.split('/')
             service_name = path_parts[0] if len(path_parts) > 0 else None
             endpoint = '/'.join(path_parts[1:]) if len(path_parts) > 1 else None
+
+            if service_name:
+                print(f"Service Name: {service_name}")
+                print(f"Endpoint After Removing Service Name: {endpoint}")
 
             if not service_name or not endpoint:
                 return JsonResponse({'error': 'Invalid path format.'}, status=400)
@@ -308,14 +317,8 @@ class NewReverseProxyAPIView(APIView):
                 )
 
             # Construct the target service URL
-            parsed_base_url = urlparse(service_entry.base_url)
-            dynamic_port = parsed_base_url.port
-
-            # Fallback to default port if none is found
-            if not dynamic_port:
-                dynamic_port = 8001  # Or any default port you want to use
-
-            url = f"http://host.docker.internal:{dynamic_port}/{resolved_endpoint.lstrip('/')}"
+            print("service_entry.base_url: ", service_entry.base_url)
+            url = f"http://{service_entry.base_url}/{resolved_endpoint.lstrip('/')}"
             query_string = request.META.get('QUERY_STRING', '')
 
             if query_string:
