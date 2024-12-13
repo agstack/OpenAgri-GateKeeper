@@ -14,7 +14,7 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from urllib.parse import urlencode
+from urllib.parse import urlparse
 
 from aegis.models import RegisteredService
 from aegis.utils.service_utils import match_endpoint
@@ -251,10 +251,8 @@ class NewReverseProxyAPIView(APIView):
 
             # Query the database for matching service and endpoint pattern
             services = RegisteredService.objects.filter(service_name=service_name, status=1)
+
             service_entry = None
-
-            print("services: ", services)
-
             # Filter by service name
             for service in services.filter():
                 # Ensure service.endpoint is valid
@@ -310,7 +308,14 @@ class NewReverseProxyAPIView(APIView):
                 )
 
             # Construct the target service URL
-            url = f"{service_entry.base_url.rstrip('/')}/{resolved_endpoint.lstrip('/')}"
+            parsed_base_url = urlparse(service_entry.base_url)
+            dynamic_port = parsed_base_url.port
+
+            # Fallback to default port if none is found
+            if not dynamic_port:
+                dynamic_port = 8001  # Or any default port you want to use
+
+            url = f"http://host.docker.internal:{dynamic_port}/{resolved_endpoint.lstrip('/')}"
             query_string = request.META.get('QUERY_STRING', '')
 
             if query_string:
