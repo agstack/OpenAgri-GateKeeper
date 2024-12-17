@@ -2,7 +2,7 @@ services:
   mysql:
     image: mysql:8.0
     build: .
-    restart: always
+    restart: no
     container_name: oa_gk_mysql_django
     env_file:
       - .env
@@ -14,9 +14,9 @@ services:
     ports:
       - "3312:3306"
     volumes:
-      - mysql_data_gatekeeper_django:/var/lib/mysql
+      - oa_gk_volume:/var/lib/mysql
     networks:
-      - shared_network_gatekeeper
+      - oa_network
     command:
       [
         "--character-set-server=utf8mb4",
@@ -26,19 +26,19 @@ services:
   phpmyadmin_gatekeeper:
     image: phpmyadmin/phpmyadmin
     container_name: oa_gk_phpmyadmin_django
-    restart: always
+    restart: no
     env_file:
       - .env
     ports:
       - "8088:80"
     networks:
-      - shared_network_gatekeeper
+      - oa_network
     depends_on:
       - mysql
 
 volumes:
-  mysql_data_gatekeeper_django: {}
+  oa_gk_volume: {}
 
 networks:
-  shared_network_gatekeeper:
+  oa_network:
     driver: bridge
