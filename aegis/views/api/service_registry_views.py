@@ -318,7 +318,7 @@ class NewReverseProxyAPIView(APIView):
 
             # Construct the target service URL
             print("service_entry.base_url: ", service_entry.base_url)
-            url = f"http://{service_entry.base_url}/{resolved_endpoint.lstrip('/')}"
+            url = f"{service_entry.base_url}{resolved_endpoint.lstrip('/')}"
             query_string = request.META.get('QUERY_STRING', '')
 
             if query_string:
