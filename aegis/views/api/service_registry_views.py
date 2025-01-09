@@ -271,12 +271,10 @@ class NewReverseProxyAPIView(APIView):
                 # Check if the stored endpoint has placeholders
                 if '{' in service.endpoint and '}' in service.endpoint:
                     # Convert placeholders to a regex pattern
-                    # pattern = re.sub(r"\{[^\}]+\}", r"[^/]+", service.endpoint)
-                    pattern = re.sub(r"\{[^\}]+\}", r"[^/]+", service.endpoint.strip('/'))
+                    pattern = re.sub(r"\{[^\}]+\}", r"[^/]+", service.endpoint)
 
                     # Match the incoming endpoint to the regex pattern
-                    # if re.fullmatch(pattern, endpoint):
-                    if re.fullmatch(pattern, endpoint.strip('/')):
+                    if re.fullmatch(pattern, endpoint):
                         service_entry = service
                         break
                 else:
