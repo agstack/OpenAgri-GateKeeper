@@ -152,8 +152,8 @@ class ServiceDirectoryAPIView(APIView):
 
             # Only fetch specific fields to optimise the query
             services = services_query.only(
-                "base_url", "service_name", "endpoint", "methods", "params", "comments", "service_url"
-            ).values("base_url", "service_name", "endpoint", "methods", "params", "comments", "service_url")
+                "base_url", "service_name", "endpoint", "methods", "params", "comments"
+            ).values("base_url", "service_name", "endpoint", "methods", "params", "comments")
 
             return JsonResponse(list(services), safe=False, status=status.HTTP_200_OK)
 
