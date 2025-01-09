@@ -21,7 +21,8 @@ class RequestLoggingMiddleware:
         response = self.get_response(request)
 
         RequestLog.objects.create(
-            user=request.user if request.user.is_authenticated else None,
+            user=getattr(request, 'user', None) if getattr(request, 'user',
+                                                           None) and request.user.is_authenticated else None,
             ip_address=request.META.get('REMOTE_ADDR'),
             user_agent=user_agent,
             path=request.path,
