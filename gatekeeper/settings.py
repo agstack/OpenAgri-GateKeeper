@@ -39,8 +39,8 @@ AVAILABLE_SERVICES = {
     },
 }
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# Default DEBUG to False
+DEBUG = os.getenv('DJANGO_DEBUG', 'False').lower() in ('true', '1', 't')
 
 ALLOWED_HOSTS = ['.localhost', '127.0.0.1', '[::1]']
 EXTRA_ALLOWED_HOSTS = os.environ.get('EXTRA_ALLOWED_HOSTS', '')
@@ -50,15 +50,47 @@ if EXTRA_ALLOWED_HOSTS:
     EXTRA_ALLOWED_HOSTS = [host.strip() for host in EXTRA_ALLOWED_HOSTS.split(',') if host.strip()]
     ALLOWED_HOSTS.extend(EXTRA_ALLOWED_HOSTS)
 
-# Generate CSRF_TRUSTED_ORIGINS from ALLOWED_HOSTS
+# # Generate CSRF_TRUSTED_ORIGINS from ALLOWED_HOSTS
+# CSRF_TRUSTED_ORIGINS = [
+#     f"https://{host}" for host in ALLOWED_HOSTS if not host.startswith('.')
+# ]
+#
+# # Add specific handling for wildcard subdomains (e.g., .193.22.146.204.nip.io)
+# CSRF_TRUSTED_ORIGINS.extend([
+#     f"https://{host[1:]}" for host in ALLOWED_HOSTS if host.startswith('.')
+# ])
+#
+# def generate_csrf_trusted_origins(base_domains):
+#     """
+#     Generate a list of CSRF trusted origins dynamically.
+#     Supports wildcards for subdomains and specific IPs.
+#     """
+#     origins = []
+#     for base in base_domains:
+#         # Add the base domain
+#         origins.append(f"https://{base}")
+#         # Add wildcard subdomains (e.g., *.example.com)
+#         origins.append(f"https://*.{base}")
+#     return origins
+#
+# # Base domains and IPs you want to trust
+# BASE_DOMAINS = [
+#     'horizon-openagri.eu',
+#     'nip.io',
+#     '193.22.146.204',
+# ]
+#
+# CSRF_TRUSTED_ORIGINS = generate_csrf_trusted_origins(BASE_DOMAINS)
+
 CSRF_TRUSTED_ORIGINS = [
-    f"https://{host}" for host in ALLOWED_HOSTS if not host.startswith('.')
+    'https://gk.sip1.193.22.146.204.nip.io',
+    'https://fc.sip1.193.22.146.204.nip.io',
+    'https://horizon-openagri.eu',
 ]
 
-# Add specific handling for wildcard subdomains (e.g., .193.22.146.204.nip.io)
-CSRF_TRUSTED_ORIGINS.extend([
-    f"https://{host[1:]}" for host in ALLOWED_HOSTS if host.startswith('.')
-])
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+CSRF_COOKIE_SECURE = True
+SESSION_COOKIE_SECURE = True
 
 APPEND_SLASH = True
 

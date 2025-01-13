@@ -3,18 +3,15 @@
 import re
 import requests
 
-from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, DatabaseError
-from django.db.models import Q
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse, HttpResponse, HttpResponseRedirect
+from django.urls import reverse
 from django.utils import timezone
 
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
-
-from urllib.parse import urlparse
 
 from aegis.models import RegisteredService
 from aegis.utils.service_utils import match_endpoint
@@ -237,10 +234,16 @@ class DeleteServiceAPIView(APIView):
 class NewReverseProxyAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
-    '''
-    THINGS TO DO:
-    Remove the endpoint check from this function
-    '''
+    def dispatch(self, request, *args, **kwargs):
+        # Check if the path ends with a slash; if not, redirect to the normalized path
+        path = kwargs.get('path', '')
+        if not path.endswith('/'):
+            # Normalize the URL by adding a trailing slash
+            new_path = f"{path}/"
+            # Redirect to the new path
+            return HttpResponseRedirect(reverse('new_reverse_proxy', kwargs={'path': new_path}))
+
+        return super().dispatch(request, *args, **kwargs)
 
     def dispatch_request(self, request, path):
         try:
