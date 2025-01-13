@@ -10,8 +10,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from aegis.views.home_view import HomeView
 from aegis.views.auth_views import LoginView, RegisterView
-from aegis.views.api.auth_views import (LoginAPIView, LogoutAPIView, RegisterAPIView, TokenValidationAPIView,
-                                        ReverseProxyAPIView)
+from aegis.views.api.auth_views import LoginAPIView, LogoutAPIView, RegisterAPIView, TokenValidationAPIView
 from aegis.views.api.service_registry_views import (ServiceDirectoryAPIView, RegisterServiceAPIView,
                                                     DeleteServiceAPIView, NewReverseProxyAPIView)
 from .views import GatewayAPIView
@@ -60,7 +59,6 @@ urlpatterns = [
     re_path(r'^api/proxy/(?P<path>.*)$', NewReverseProxyAPIView.as_view(), name='new_reverse_proxy'),
     # re_path(r'^api/proxy/(?P<service_name>[^/]+)/(?P<path>.*)$', NewReverseProxyAPIView.as_view(), name='new_reverse_proxy'),
 
-    # re_path(r'^api/resources/(?P<path>.*)$', ReverseProxyAPIView.as_view(), name='reverse_proxy'),
     path('aegis/', include('aegis.urls', namespace='aegis')),
 
     # path('api/test_gateway/', GatewayAPIView.as_view(), name='test_gateway'),

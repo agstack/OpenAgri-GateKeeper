@@ -38,26 +38,27 @@ AVAILABLE_SERVICES = {
         'post_auth': None,
     },
 }
-# same with this data, also cames in the service announcement
-# in the service registration endpoint
-REVERSE_PROXY_MAPPING = {
-    'Farm': 'FarmCalendar',
-    'FarmActivities': 'FarmCalendar',
-    'FarmActivityTypes': 'FarmCalendar',
-    'FarmAssets': 'FarmCalendar',
-    'FarmPlants': 'FarmCalendar',
-    'WeeklyWeatherForecast': 'WeatherService',
-}
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
 ALLOWED_HOSTS = ['.localhost', '127.0.0.1', '[::1]']
-EXTRA_ALLOWED_HOSTS = os.environ.get('EXTRA_ALLOWED_HOSTS', None)
-if EXTRA_ALLOWED_HOSTS is not None:
-    EXTRA_ALLOWED_HOSTS = EXTRA_ALLOWED_HOSTS.split(',')
+EXTRA_ALLOWED_HOSTS = os.environ.get('EXTRA_ALLOWED_HOSTS', '')
+
+if EXTRA_ALLOWED_HOSTS:
+    # EXTRA_ALLOWED_HOSTS = EXTRA_ALLOWED_HOSTS.split(',')
+    EXTRA_ALLOWED_HOSTS = [host.strip() for host in EXTRA_ALLOWED_HOSTS.split(',') if host.strip()]
     ALLOWED_HOSTS.extend(EXTRA_ALLOWED_HOSTS)
 
+# Generate CSRF_TRUSTED_ORIGINS from ALLOWED_HOSTS
+CSRF_TRUSTED_ORIGINS = [
+    f"https://{host}" for host in ALLOWED_HOSTS if not host.startswith('.')
+]
+
+# Add specific handling for wildcard subdomains (e.g., .193.22.146.204.nip.io)
+CSRF_TRUSTED_ORIGINS.extend([
+    f"https://{host[1:]}" for host in ALLOWED_HOSTS if host.startswith('.')
+])
 
 APPEND_SLASH = True
 
@@ -72,7 +73,8 @@ DEFAULT_APPS = [
 ]
 
 LOCAL_APPS = [
-    "aegis.apps.AegisConfig",       # The app that contains auth logic, configured using the app's AppConfig.
+    "aegis"
+    # "aegis.apps.AegisConfig",       # The app that contains auth logic, configured using the app's AppConfig.
 ]
 
 THIRD_PARTY_APPS = [
