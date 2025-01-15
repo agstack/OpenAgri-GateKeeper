@@ -42,11 +42,23 @@ class LoginView(FormView):
             password = form.cleaned_data["password"]
             # service_name = form.cleaned_data["service_name"]
 
+            login_url = f"{settings.INTERNAL_GK_URL}api/login/"
+
             # Use the same authentication endpoint used by LoginAPIView to obtain tokens
-            response = requests.post(
-                request.build_absolute_uri(reverse_lazy('api_login')),
-                data={"username": username, "password": password}
-            )
+            # response = requests.post(
+            #     # request.build_absolute_uri(reverse_lazy('api_login')),
+            #     f"http://gatekeeper:8001/api/login/",  # Internal service URL
+            #     data={"username": username, "password": password}
+            # )
+
+            try:
+                response = requests.post(
+                    login_url,
+                    data={"username": username, "password": password}
+                )
+            except requests.RequestException as e:
+                form.add_error(None, f"Could not connect to Gatekeeper: {str(e)}")
+                return self.render_to_response(self.get_context_data(form=form))
 
             if response.status_code == status.HTTP_200_OK:
                 data = response.json()

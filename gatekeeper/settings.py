@@ -39,6 +39,8 @@ AVAILABLE_SERVICES = {
     },
 }
 
+INTERNAL_GK_URL = os.getenv('INTERNAL_GK_URL', 'http://gatekeeper:8001/')
+
 # Default DEBUG to False
 # DEBUG = os.getenv('DJANGO_DEBUG', '').strip().lower() in ('true', '1', 't')
 DEBUG = 'DJANGO_DEBUG' in os.environ and os.getenv('DJANGO_DEBUG', '').strip().lower() in ('true', '1', 't')
@@ -106,8 +108,8 @@ DEFAULT_APPS = [
 ]
 
 LOCAL_APPS = [
-    "aegis"
-    # "aegis.apps.AegisConfig",       # The app that contains auth logic, configured using the app's AppConfig.
+    # "aegis"
+    "aegis.apps.AegisConfig",       # The app that contains auth logic, configured using the app's AppConfig.
 ]
 
 THIRD_PARTY_APPS = [
@@ -230,7 +232,7 @@ MESSAGE_TAGS = {
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
 
-LANGUAGE_CODE = 'en-gn'
+LANGUAGE_CODE = 'en-gb'
 
 TIME_ZONE = 'UTC'
 
