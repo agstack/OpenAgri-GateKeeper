@@ -5,7 +5,7 @@
 **/assets/
 **/staticfiles/
 **/mysql_docker/
-!**/migrations/
+#!**/migrations/
 keys/
 
 .yarnrc.yml

@@ -42,8 +42,8 @@ AVAILABLE_SERVICES = {
 INTERNAL_GK_URL = os.getenv('INTERNAL_GK_URL', 'http://gatekeeper:8001/')
 
 # Default DEBUG to False
-# DEBUG = os.getenv('DJANGO_DEBUG', '').strip().lower() in ('true', '1', 't')
-DEBUG = 'DJANGO_DEBUG' in os.environ and os.getenv('DJANGO_DEBUG', '').strip().lower() in ('true', '1', 't')
+DEBUG = os.getenv('DJANGO_DEBUG', 'False') == 'True'
+# DEBUG = 'DJANGO_DEBUG' in os.environ and os.getenv('DJANGO_DEBUG', '').strip().lower() in ('true', '1', 't')
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', '[::1]']
 EXTRA_ALLOWED_HOSTS = os.environ.get('EXTRA_ALLOWED_HOSTS', '')
@@ -142,8 +142,6 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'gatekeeper.custom_middleware.RequestLoggingMiddleware.RequestLoggingMiddleware',
-
-    # 'gatekeeper.middleware.jwt_middleware',
 ]
 
 ROOT_URLCONF = 'gatekeeper.urls'
