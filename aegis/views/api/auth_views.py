@@ -1,18 +1,16 @@
 # views/api_views.py
 
-import requests
+import logging
 
 from django import forms
-from django.conf import settings
-from django.http import JsonResponse, HttpResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 
 from rest_framework import status, permissions
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
@@ -21,6 +19,8 @@ from datetime import datetime, timezone
 from aegis.forms import UserRegistrationForm
 from aegis.services.auth_services import register_user
 from aegis.serializers import CustomTokenObtainPairSerializer
+
+logging.basicConfig(level=logging.ERROR)
 
 
 @method_decorator(never_cache, name='dispatch')
@@ -57,9 +57,11 @@ class RegisterAPIView(APIView):
                     "error": str(e)
                 }, status=status.HTTP_400_BAD_REQUEST)
             except Exception as e:
+                logging.error(f"An unexpected error occurred: {str(e)}", exc_info=True)
                 return Response({
                     "success": False,
-                    "error": f"An unexpected error occurred: {str(e)}"
+                    # "error": f"An unexpected error occurred: {str(e)}"
+                    "error": "An unexpected error occurred. Please try again later."
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         # Return validation errors
