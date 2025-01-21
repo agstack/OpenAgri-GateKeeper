@@ -13,7 +13,6 @@ from aegis.views.auth_views import LoginView, RegisterView
 from aegis.views.api.auth_views import LoginAPIView, LogoutAPIView, RegisterAPIView, TokenValidationAPIView
 from aegis.views.api.service_registry_views import (ServiceDirectoryAPIView, RegisterServiceAPIView,
                                                     DeleteServiceAPIView, NewReverseProxyAPIView)
-from .views import GatewayAPIView
 from .common import custom_page_not_found_view
 
 
