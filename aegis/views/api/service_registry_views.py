@@ -1,5 +1,6 @@
 # aegis/views/api/service_registry_views.py
 
+import logging
 import re
 import requests
 
@@ -110,18 +111,24 @@ class RegisterServiceAPIView(APIView):
             )
 
         except (IntegrityError, DatabaseError) as db_error:
+            logging.error(f"Database error: {str(db_error)}")
             return JsonResponse(
-                {"error": f"Database error: {str(db_error)}"},
+                # {"error": f"Database error: {str(db_error)}"},
+                {"error": "A database error has occurred."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         except ValidationError as val_error:
+            logging.error(f"Validation error: {str(val_error)}")
             return JsonResponse(
-                {"error": f"Validation error: {str(val_error)}"},
+                # {"error": f"Validation error: {str(val_error)}"},
+                {"error": "A validation error has occurred."},
                 status=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
+            logging.error(f"Unexpected error: {str(e)}")
             return JsonResponse(
-                {"error": f"Unexpected error: {str(e)}"},
+                # {"error": f"Unexpected error: {str(e)}"},
+                {"error": "An unexpected error has occurred."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -155,13 +162,17 @@ class ServiceDirectoryAPIView(APIView):
             return JsonResponse(list(services), safe=False, status=status.HTTP_200_OK)
 
         except DatabaseError as db_error:
+            logging.error(f"Database error: {str(db_error)}")
             return JsonResponse(
-                {"error": f"Database error: {str(db_error)}"},
+                # {"error": f"Database error: {str(db_error)}"},
+                {"error": "A database error has occurred."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         except Exception as e:
+            logging.error(f"Unexpected error: {str(e)}")
             return JsonResponse(
-                {"error": f"Unexpected error: {str(e)}"},
+                # {"error": f"Unexpected error: {str(e)}"},
+                {"error": "An unexpected error has occurred."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -220,13 +231,17 @@ class DeleteServiceAPIView(APIView):
             )
 
         except DatabaseError as db_error:
+            logging.error(f"Database error: {str(db_error)}")
             return JsonResponse(
-                {"error": f"Database error: {str(db_error)}"},
+                # {"error": f"Database error: {str(db_error)}"},
+                {"error": "A database error has occurred."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         except Exception as e:
+            logging.error(f"Unexpected error: {str(e)}")
             return JsonResponse(
-                {"error": f"Unexpected error: {str(e)}"},
+                # {"error": f"Unexpected error: {str(e)}"},
+                {"error": "An unexpected error has occurred."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
