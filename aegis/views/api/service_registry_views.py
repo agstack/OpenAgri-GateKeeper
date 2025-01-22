@@ -56,6 +56,43 @@ class RegisterServiceAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # Validate base_url
+        if len(base_url) > 100:
+            return JsonResponse(
+                {"error": "Base URL must not exceed 100 characters."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not re.match(r"^(http|https)://[a-zA-Z0-9]([a-zA-Z0-9._]*[a-zA-Z0-9])?:[0-9]{1,5}/$", base_url):
+            return JsonResponse(
+                {
+                    "error": "Base URL must follow the format 'http://baseurl:port/' or 'https://baseurl:port/'. "
+                             "The base URL name must only contain alphanumeric characters, dots (.), or underscores (_), "
+                             "and must start and end with an alphanumeric character. The port number must be 1-5 digits."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validate service_name
+        if not re.match(r"^[a-zA-Z0-9]([a-zA-Z0-9_]*[a-zA-Z0-9])?$", service_name) or len(service_name) >= 30:
+            return JsonResponse(
+                {"error": "Service name must only contain alphanumeric characters and underscores. "
+                          "It cannot start or end with an underscore, and must be less than 30 characters long."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validate endpoint
+        if endpoint.startswith("/") or endpoint.startswith("\\"):
+            return JsonResponse(
+                {"error": "Endpoint must not start with a forward or backward slash."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if len(endpoint) > 100:
+            return JsonResponse(
+                {"error": "Endpoint must not exceed 100 characters."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         # Ensure consistent formatting (always include trailing slash for endpoint)
         endpoint = endpoint.rstrip('/') + '/'  # Ensure trailing slash for endpoint
 
