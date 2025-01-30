@@ -6,6 +6,7 @@
 **/staticfiles/
 **/assets/
 keys/
+traefik/
 
 # Files
 .env

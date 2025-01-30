@@ -58,7 +58,7 @@ CSRF_TRUSTED_ORIGINS = [
     f"https://{host}" for host in ALLOWED_HOSTS if not host.startswith('.')
 ]
 
-# Add specific handling for wildcard subdomains (e.g., .193.22.146.204.nip.io)
+# Add specific handling for wildcard subdomains
 CSRF_TRUSTED_ORIGINS.extend([
     f"https://{host[1:]}" for host in ALLOWED_HOSTS if host.startswith('.')
 ])
@@ -135,6 +135,7 @@ LOGOUT_REDIRECT_URL = 'login'  # Redirect to the login page after logging out
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -232,16 +233,21 @@ USE_I18N = True
 
 USE_TZ = True
 
+# WhiteNoise requires STATICFILES_STORAGE
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # STATIC_URL is the URL to use when referring to static files (like CSS, JavaScript, and images) in templates.
 STATIC_URL = "/assets/"
 
 # This setting defines the list of directories where Django will look for additional static files, in addition to
 # each app's static folder.
-STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
+# STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
+STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")] if DEBUG else []
 
 # STATIC_ROOT is the directory where these static files will be collected when you run collectstatic.
 STATIC_ROOT = os.path.join(BASE_DIR, 'assets')
+
+AUTH_EXEMPT_PATHS = ["/assets/"]
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
@@ -254,7 +260,7 @@ DJANGO_PORT = os.getenv('APP_PORT', '8001')
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=10080),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=365),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=90),
     'ROTATE_REFRESH_TOKENS': False,
     'BLACKLIST_AFTER_ROTATION': True,
     'UPDATE_LAST_LOGIN': True,
