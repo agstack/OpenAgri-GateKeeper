@@ -1,6 +1,8 @@
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
+from django.db import connection
+from django.http import HttpResponse, JsonResponse
 from django.urls import path, include, re_path
 
 from drf_yasg.views import get_schema_view
@@ -16,25 +18,37 @@ from aegis.views.api.service_registry_views import (ServiceDirectoryAPIView, Reg
 from .common import custom_page_not_found_view
 
 
-schema_view = get_schema_view(
-    openapi.Info(
-        title="GateKeeper API",
-        default_version='v1',
-        description="Test description",
-        # terms_of_service="https://www.google.com/policies/terms/",
-        contact=openapi.Contact(email="p.bapat@maastrichtuniversity.nl"),
-        license=openapi.License(name="EUPLv1.2 License"),
-    ),
-    public=True,
-    permission_classes=[permissions.AllowAny],
-)
+# schema_view = get_schema_view(
+#     openapi.Info(
+#         title="GateKeeper API",
+#         default_version='v1',
+#         description="Test description",
+#         # terms_of_service="https://www.google.com/policies/terms/",
+#         contact=openapi.Contact(email="p.bapat@maastrichtuniversity.nl"),
+#         license=openapi.License(name="EUPLv1.2 License"),
+#     ),
+#     public=True,
+#     permission_classes=[permissions.AllowAny],
+# )
 
+
+def robots_txt(request):
+    return HttpResponse("User-agent: *\nDisallow: /", content_type="text/plain")
+
+def health_check(request):
+    try:
+        # Check database connectivity
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+        return JsonResponse({"status": "ready"}, status=200)
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
 urlpatterns = [
     # Swagger UI
-    re_path(r'^swagger(?P<format>\.json|\.yaml)$', schema_view.without_ui(cache_timeout=0), name='schema-json'),
-    path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
-    path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
+    # re_path(r'^swagger(?P<format>\.json|\.yaml)$', schema_view.without_ui(cache_timeout=0), name='schema-json'),
+    # path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
+    # path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
 
     path('o/', include('oauth2_provider.urls', namespace='oauth2_provider')),
 
@@ -64,6 +78,9 @@ urlpatterns = [
 
     # Catch-all route for GatewayAPIView
     # re_path(r"^api/(?P<path>.*)$", GatewayAPIView.as_view(), name="gateway")
+
+    path("healthz", health_check, name="health_check"),
+    path("robots.txt", robots_txt),
 ]
 
 if settings.DEBUG:
