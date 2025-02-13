@@ -2,7 +2,7 @@
 
 import logging
 
-from django import forms
+# from django import forms
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 
@@ -16,8 +16,8 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 
 from datetime import datetime, timezone
 
-from aegis.forms import UserRegistrationForm
-from aegis.services.auth_services import register_user
+# from aegis.forms import UserRegistrationForm
+# from aegis.services.auth_services import register_user
 from aegis.serializers import CustomTokenObtainPairSerializer
 
 logging.basicConfig(level=logging.ERROR)
