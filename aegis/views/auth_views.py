@@ -90,48 +90,48 @@ class LoginView(FormView):
         return self.render_to_response(self.get_context_data(form=form))
 
 
-@method_decorator(never_cache, name='dispatch')
-class RegisterView(FormView):
-    template_name = "auth/register.html"
-    form_class = UserRegistrationForm
-    success_url = reverse_lazy("login")
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context["next"] = self.request.GET.get("next", "") or self.request.POST.get("next", "")
-        return context
-
-    def get(self, request, *args, **kwargs):
-        form = self.form_class()
-        context = self.get_context_data(form=form)
-        return self.render_to_response(context)
-
-    def post(self, request, *args, **kwargs):
-        next_url = request.POST.get("next") or request.GET.get("next", "")
-        form = self.form_class(request.POST)
-
-        if form.is_valid():
-            try:
-                # Register the user
-                register_user(
-                    username=form.cleaned_data["username"],
-                    email=form.cleaned_data["email"],
-                    password=form.cleaned_data["password"],
-                    first_name=form.cleaned_data["first_name"],
-                    last_name=form.cleaned_data["last_name"],
-                    # service_name=form.cleaned_data["service_name"],
-                )
-
-                if next_url:
-                    redirect_url = f"{reverse_lazy('login')}?next={next_url}"
-                else:
-                    redirect_url = reverse_lazy("login")
-
-                return HttpResponseRedirect(redirect_url)
-
-            except forms.ValidationError as e:
-                form.add_error(None, str(e))
-            except Exception as e:
-                form.add_error(None, f"An unexpected error occurred: {str(e)}")
-
-        return self.render_to_response(self.get_context_data(form=form))
+# @method_decorator(never_cache, name='dispatch')
+# class RegisterView(FormView):
+#     template_name = "auth/register.html"
+#     form_class = UserRegistrationForm
+#     success_url = reverse_lazy("login")
+#
+#     def get_context_data(self, **kwargs):
+#         context = super().get_context_data(**kwargs)
+#         context["next"] = self.request.GET.get("next", "") or self.request.POST.get("next", "")
+#         return context
+#
+#     def get(self, request, *args, **kwargs):
+#         form = self.form_class()
+#         context = self.get_context_data(form=form)
+#         return self.render_to_response(context)
+#
+#     def post(self, request, *args, **kwargs):
+#         next_url = request.POST.get("next") or request.GET.get("next", "")
+#         form = self.form_class(request.POST)
+#
+#         if form.is_valid():
+#             try:
+#                 # Register the user
+#                 register_user(
+#                     username=form.cleaned_data["username"],
+#                     email=form.cleaned_data["email"],
+#                     password=form.cleaned_data["password"],
+#                     first_name=form.cleaned_data["first_name"],
+#                     last_name=form.cleaned_data["last_name"],
+#                     # service_name=form.cleaned_data["service_name"],
+#                 )
+#
+#                 if next_url:
+#                     redirect_url = f"{reverse_lazy('login')}?next={next_url}"
+#                 else:
+#                     redirect_url = reverse_lazy("login")
+#
+#                 return HttpResponseRedirect(redirect_url)
+#
+#             except forms.ValidationError as e:
+#                 form.add_error(None, str(e))
+#             except Exception as e:
+#                 form.add_error(None, f"An unexpected error occurred: {str(e)}")
+#
+#         return self.render_to_response(self.get_context_data(form=form))

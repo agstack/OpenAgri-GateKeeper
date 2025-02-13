@@ -28,47 +28,47 @@ class LoginAPIView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
 
 
-@method_decorator(never_cache, name='dispatch')
-class RegisterAPIView(APIView):
-    permission_classes = [permissions.AllowAny]
-    authentication_classes = []
-
-    def post(self, request):
-        form = UserRegistrationForm(request.data)
-
-        if form.is_valid():
-            try:
-                register_user(
-                    username=form.cleaned_data["username"],
-                    email=form.cleaned_data["email"],
-                    # service_name=form.cleaned_data["service_name"],
-                    password=form.cleaned_data["password"],
-                    first_name=form.cleaned_data["first_name"],
-                    last_name=form.cleaned_data["last_name"]
-                )
-                return Response({
-                    "success": True,
-                    "message": "User registered successfully. Please log in."
-                }, status=status.HTTP_201_CREATED)
-
-            except forms.ValidationError as e:
-                return Response({
-                    "success": False,
-                    "error": str(e)
-                }, status=status.HTTP_400_BAD_REQUEST)
-            except Exception as e:
-                logging.error(f"An unexpected error occurred: {str(e)}", exc_info=True)
-                return Response({
-                    "success": False,
-                    # "error": f"An unexpected error occurred: {str(e)}"
-                    "error": "An unexpected error occurred. Please try again later."
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        # Return validation errors
-        return Response({
-            "success": False,
-            "errors": form.errors
-        }, status=status.HTTP_400_BAD_REQUEST)
+# @method_decorator(never_cache, name='dispatch')
+# class RegisterAPIView(APIView):
+#     permission_classes = [permissions.AllowAny]
+#     authentication_classes = []
+#
+#     def post(self, request):
+#         form = UserRegistrationForm(request.data)
+#
+#         if form.is_valid():
+#             try:
+#                 register_user(
+#                     username=form.cleaned_data["username"],
+#                     email=form.cleaned_data["email"],
+#                     # service_name=form.cleaned_data["service_name"],
+#                     password=form.cleaned_data["password"],
+#                     first_name=form.cleaned_data["first_name"],
+#                     last_name=form.cleaned_data["last_name"]
+#                 )
+#                 return Response({
+#                     "success": True,
+#                     "message": "User registered successfully. Please log in."
+#                 }, status=status.HTTP_201_CREATED)
+#
+#             except forms.ValidationError as e:
+#                 return Response({
+#                     "success": False,
+#                     "error": str(e)
+#                 }, status=status.HTTP_400_BAD_REQUEST)
+#             except Exception as e:
+#                 logging.error(f"An unexpected error occurred: {str(e)}", exc_info=True)
+#                 return Response({
+#                     "success": False,
+#                     # "error": f"An unexpected error occurred: {str(e)}"
+#                     "error": "An unexpected error occurred. Please try again later."
+#                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+#
+#         # Return validation errors
+#         return Response({
+#             "success": False,
+#             "errors": form.errors
+#         }, status=status.HTTP_400_BAD_REQUEST)
 
 
 @method_decorator(never_cache, name='dispatch')
