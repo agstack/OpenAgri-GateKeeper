@@ -21,7 +21,8 @@ from aegis.services.auth_services import register_user
 class LoginView(FormView):
     template_name = "auth/login.html"
     form_class = UserLoginForm
-    success_url = reverse_lazy("aegis:dashboard")
+    success_url = reverse_lazy('home')
+    # success_url = reverse_lazy("aegis:dashboard")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -35,6 +36,10 @@ class LoginView(FormView):
 
     def post(self, request, *args, **kwargs):
         next_url = request.POST.get("next") or request.GET.get("next", "")
+
+        if not next_url:
+            return HttpResponseRedirect(self.success_url)
+
         form = self.form_class(request.POST)
 
         if form.is_valid():
