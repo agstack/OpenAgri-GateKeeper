@@ -1,8 +1,9 @@
-import os
-from pathlib import Path
-from dotenv import load_dotenv
-from datetime import timedelta
 import dj_database_url
+import os
+
+from datetime import timedelta
+from dotenv import load_dotenv
+from pathlib import Path
 
 from django.contrib.messages import constants as messages
 
@@ -21,13 +22,77 @@ if not os.path.exists(LOG_DIR):
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = get_env_var('DJANGO_SECRET_KEY')
 
-JWT_SIGNING_KEY = os.environ.get('JWT_SIGNING_KEY')
-JWT_ALG = os.environ.get('JWT_ALG')
+JWT_SIGNING_KEY = get_env_var('JWT_SIGNING_KEY')
+JWT_ALG = os.environ.get('JWT_ALG', "HS256")
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# geting from env var from now, but in the future this infos should
+# come with the service registration post request
+AVAILABLE_SERVICES = {
+    'FarmCalendar':
+    {
+        'api': os.getenv('FARM_CALENDAR_API', 'http://127.0.0.1:8002/api/'),
+        'post_auth': os.getenv('FARM_CALENDAR_POST_AUTH', 'http://127.0.0.1:8002/post_auth/')
+    },
+    'IrrigationManagement':
+    {
+        'api': os.getenv('IRM_API', 'http://127.0.0.1:5173/api/'),
+        'post_auth': os.getenv('IRM_POST_AUTH', 'http://127.0.0.1:5173/post_auth/')
+    },
+    # 'WeatherService': {
+    #     'api': 'http://external_weather/api/',
+    #     'post_auth': None,
+    # },
+}
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+INTERNAL_GK_URL = os.getenv('INTERNAL_GK_URL', 'http://gatekeeper:8001/')
+
+# Default DEBUG to False
+DEBUG = os.getenv('DJANGO_DEBUG', 'False') == 'True'
+# DEBUG = 'DJANGO_DEBUG' in os.environ and os.getenv('DJANGO_DEBUG', '').strip().lower() in ('true', '1', 't')
+
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '[::1]']
+EXTRA_ALLOWED_HOSTS = os.environ.get('EXTRA_ALLOWED_HOSTS', '')
+
+if EXTRA_ALLOWED_HOSTS:
+    # EXTRA_ALLOWED_HOSTS = EXTRA_ALLOWED_HOSTS.split(',')
+    EXTRA_ALLOWED_HOSTS = [host.strip() for host in EXTRA_ALLOWED_HOSTS.split(',') if host.strip()]
+    ALLOWED_HOSTS.extend(EXTRA_ALLOWED_HOSTS)
+
+# Generate CSRF_TRUSTED_ORIGINS from ALLOWED_HOSTS
+CSRF_TRUSTED_ORIGINS = [
+    f"https://{host}" for host in ALLOWED_HOSTS if not host.startswith('.')
+]
+
+# Add specific handling for wildcard subdomains
+CSRF_TRUSTED_ORIGINS.extend([
+    f"https://{host[1:]}" for host in ALLOWED_HOSTS if host.startswith('.')
+])
+
+def generate_csrf_trusted_origins(base_domains):
+    origins = []
+    for base in base_domains:
+        # Add the base domain
+        origins.append(f"https://{base}")
+        # Add wildcard subdomains (e.g., *.example.com)
+        origins.append(f"https://*.{base}")
+    return origins
+
+# Base domains and IPs you want to trust
+BASE_DOMAINS = [
+    'horizon-openagri.eu'
+]
+
+CSRF_TRUSTED_ORIGINS = generate_csrf_trusted_origins(BASE_DOMAINS)
+
+# CSRF_TRUSTED_ORIGINS = [
+#     'https://gk.sip1.193.22.146.204.nip.io',
+#     'https://fc.sip1.193.22.146.204.nip.io',
+#     'https://horizon-openagri.eu',
+# ]
+
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+CSRF_COOKIE_SECURE = True
+SESSION_COOKIE_SECURE = True
 
 APPEND_SLASH = True
 
@@ -42,6 +107,7 @@ DEFAULT_APPS = [
 ]
 
 LOCAL_APPS = [
+    # "aegis"
     "aegis.apps.AegisConfig",       # The app that contains auth logic, configured using the app's AppConfig.
 ]
 
@@ -52,6 +118,7 @@ THIRD_PARTY_APPS = [
     'rest_framework',
     'drf_yasg',
     'oauth2_provider',
+    'rest_framework_simplejwt.token_blacklist',
 ]
 
 INSTALLED_APPS = DEFAULT_APPS + LOCAL_APPS + THIRD_PARTY_APPS
@@ -72,15 +139,16 @@ LOGOUT_REDIRECT_URL = 'login'  # Redirect to the login page after logging out
 
 
 MIDDLEWARE = [
-    'gatekeeper.custom_middleware.RequestLoggingMiddleware.RequestLoggingMiddleware',
-
     'django.middleware.security.SecurityMiddleware',
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'gatekeeper.custom_middleware.ForceAppendSlashMiddleware.ForceAppendSlashMiddleware',
+    # 'gatekeeper.custom_middleware.RequestLoggingMiddleware.RequestLoggingMiddleware',
 ]
 
 ROOT_URLCONF = 'gatekeeper.urls'
@@ -108,8 +176,6 @@ WSGI_APPLICATION = 'gatekeeper.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
-
-# quick workaround for now to using other databases other than mysql
 DATABASES = {
     'default': dj_database_url.config(
         default=(
@@ -153,7 +219,7 @@ MESSAGE_TAGS = {
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
 
-LANGUAGE_CODE = 'en-gn'
+LANGUAGE_CODE = 'en-gb'
 
 TIME_ZONE = 'UTC'
 
@@ -161,16 +227,21 @@ USE_I18N = True
 
 USE_TZ = True
 
+# WhiteNoise requires STATICFILES_STORAGE
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # STATIC_URL is the URL to use when referring to static files (like CSS, JavaScript, and images) in templates.
 STATIC_URL = "/assets/"
 
 # This setting defines the list of directories where Django will look for additional static files, in addition to
 # each app's static folder.
-STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
+# STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
+STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")] if DEBUG else []
 
 # STATIC_ROOT is the directory where these static files will be collected when you run collectstatic.
 STATIC_ROOT = os.path.join(BASE_DIR, 'assets')
+
+AUTH_EXEMPT_PATHS = ["/assets/"]
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
@@ -180,7 +251,6 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'aegis.DefaultAuthUserExtend'
 
 DJANGO_PORT = os.getenv('DJANGO_PORT', '8001')
-JWT_SIGNING_KEY = get_env_var('JWT_SIGNING_KEY')
 
 
 # geting from env var from now, but in the future this infos should
@@ -206,15 +276,14 @@ REVERSE_PROXY_MAPPING = {
     'WeeklyWeatherForecast': 'WeatherService',
 }
 
-
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=10080),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=90),
     'ROTATE_REFRESH_TOKENS': False,
     'BLACKLIST_AFTER_ROTATION': True,
     'UPDATE_LAST_LOGIN': True,
 
-    'ALGORITHM': 'HS256',
+    'ALGORITHM': JWT_ALG,
     'SIGNING_KEY': JWT_SIGNING_KEY,
     'VERIFYING_KEY': None,
     'AUDIENCE': None,
@@ -224,7 +293,7 @@ SIMPLE_JWT = {
 
     'AUTH_HEADER_TYPES': ('Bearer',),
     'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
-    'USER_ID_FIELD': 'id',
+    'USER_ID_FIELD': 'uuid',
     'USER_ID_CLAIM': 'user_id',
     'USER_AUTHENTICATION_RULE': 'rest_framework_simplejwt.authentication.default_user_authentication_rule',
 }
@@ -237,6 +306,14 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.UserRateThrottle',
+        'rest_framework.throttling.AnonRateThrottle'
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'user': '10000/day',
+        'anon': '100/hour'
+    }
 }
 
 OAUTH2_PROVIDER = {
@@ -290,3 +367,8 @@ LOGGING = {
         },
     },
 }
+
+FARM_CALENDAR = os.getenv('FARM_CALENDAR')
+IRM = os.getenv('IRM')
+
+GATEKEEPER_URL = os.getenv('GATEKEEPER_URL')

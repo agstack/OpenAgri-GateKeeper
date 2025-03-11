@@ -21,6 +21,9 @@
         <link href="{% static 'css/icons.min.css'%}" rel="stylesheet" type="text/css" />
         <!-- App Css-->
         <link href="{% static 'css/app.min.css'%}" id="app-style" rel="stylesheet" type="text/css" />
+
+        {% block extra_css %}
+        {% endblock extra_css %}
         {% endblock css %}
 
         <meta name="csrf-token" content="{{ csrf_token }}">
@@ -94,6 +97,9 @@
             <script src="{% static 'libs/pace-js/pace.min.js'%}"></script>
 
             <script src="{% static 'js/pages/feather-icon.init.js'%}"></script>
+
+            {% block extra_js %}
+            {% endblock extra_js %}
 
             <script>
                 document.cookie = "user_timezone=" + Intl.DateTimeFormat().resolvedOptions().timeZone + "; path=/";

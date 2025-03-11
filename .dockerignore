@@ -5,6 +5,9 @@
 **/assets/
 **/staticfiles/
 **/mysql_docker/
+#!**/migrations/
+keys/
+traefik/
 
 .yarnrc.yml
 README.md
@@ -16,4 +19,6 @@ README.md
 .Python
 *.git
 *.hg
+
 .env
+

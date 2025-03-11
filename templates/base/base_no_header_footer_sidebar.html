@@ -12,8 +12,6 @@
     <link rel="shortcut icon" href="{% static 'images/favicon.ico'%}">
 
     {% block css %}
-    {% block extra_css %}
-    {% endblock extra_css %}
     <!-- preloader css -->
     <link rel="stylesheet" href="{% static 'css/preloader.min.css'%}" type="text/css" />
 
@@ -23,6 +21,9 @@
     <link href="{% static 'css/icons.min.css'%}" rel="stylesheet" type="text/css" />
     <!-- App Css-->
     <link href="{% static 'css/app.min.css'%}" id="app-style" rel="stylesheet" type="text/css" />
+
+    {% block extra_css %}
+    {% endblock extra_css %}
     {% endblock css %}
 
     <meta name="csrf-token" content="{{ csrf_token }}">
@@ -47,9 +48,10 @@
         <script src="{% static 'libs/feather-icons/dist/feather.min.js'%}"></script>
         <!-- pace js -->
         <script src="{% static 'libs/pace-js/pace.min.js'%}"></script>
+
         {% block extra_js %}
         {% endblock extra_js %}
-        <script src="{% static 'js/app.js' %}"></script>
+
         <script>
             document.cookie = "user_timezone=" + Intl.DateTimeFormat().resolvedOptions().timeZone + "; path=/";
         </script>

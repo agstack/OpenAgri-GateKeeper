@@ -1,36 +1,44 @@
-version: '3.9'
-
 services:
   mysql:
+    image: mysql:8.0
     build: .
     restart: no
-    container_name: gatekeeper_mysql
+    container_name: oa_gk_mysql_django
     env_file:
       - .env
+    environment:
+      MYSQL_DATABASE: gatekeeper
+      MYSQL_ROOT_PASSWORD: asdasdasd
+      MYSQL_USER: gatekeeper_admin
+      MYSQL_PASSWORD: asdasdasd
     ports:
-      - "3310:3306"
+      - "3312:3306"
     volumes:
-      - mysql_data_gatekeeper:/var/lib/mysql
+      - oa_gk_volume:/var/lib/mysql
     networks:
-      - shared_network_gatekeeper
+      - oa_network
+    command:
+      [
+        "--character-set-server=utf8mb4",
+        "--collation-server=utf8mb4_unicode_ci"
+      ]
 
   phpmyadmin_gatekeeper:
     image: phpmyadmin/phpmyadmin
-    container_name: gatekeeper_phpmyadmin
+    container_name: oa_gk_phpmyadmin_django
     restart: no
     env_file:
       - .env
     ports:
-      - "8087:80"
+      - "8088:80"
     networks:
-      - shared_network_gatekeeper
+      - oa_network
     depends_on:
       - mysql
 
 volumes:
-  mysql_data_gatekeeper: {}
+  oa_gk_volume: {}
 
 networks:
-  shared_network_gatekeeper:
+  oa_network:
     driver: bridge
-    external: true

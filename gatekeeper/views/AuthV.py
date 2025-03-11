@@ -6,7 +6,7 @@ from urllib.parse import urlencode
 
 from django.views.generic import TemplateView
 from django.conf import settings
-from django.contrib.auth import login as auth_login, logout as auth_logout
+from django.contrib.auth import login as auth_login
 from django.views.decorators.cache import never_cache
 from django.utils.decorators import method_decorator
 from django.shortcuts import render, redirect
