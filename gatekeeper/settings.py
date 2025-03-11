@@ -176,18 +176,6 @@ WSGI_APPLICATION = 'gatekeeper.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
-
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.mysql',
-#         'NAME': os.getenv("DB_NAME"),
-#         'USER': os.getenv("DB_USER"),
-#         'PASSWORD': os.getenv("DB_PASS"),
-#         'HOST': os.getenv("DB_HOST"),
-#         'PORT': os.getenv("DB_PORT"),
-#     },
-# }
-
 DATABASES = {
     'default': dj_database_url.config(
         default=(
@@ -262,7 +250,31 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Custom user model replacing the default Django user model.
 AUTH_USER_MODEL = 'aegis.DefaultAuthUserExtend'
 
-DJANGO_PORT = os.getenv('APP_PORT', '8001')
+DJANGO_PORT = os.getenv('DJANGO_PORT', '8001')
+
+
+# geting from env var from now, but in the future this infos should
+# come with the service registration post request
+AVAILABLE_SERVICES = {
+    'FarmCalendar':
+    {
+        'api': os.getenv('FARM_CALENDAR_API', 'http://127.0.0.1:8002/api/'),
+        'post_auth': os.getenv('FARM_CALENDAR_POST_AUTH', 'http://127.0.0.1:8002/post_auth/')
+    },
+    'WeatherService': {
+        'api': 'http://external_weather/api/',
+        'post_auth': None,
+    },
+}
+# same with this data, also cames in the service announcement
+# in the service registration endpoint
+REVERSE_PROXY_MAPPING = {
+    'FarmActivities': 'FarmCalendar',
+    'FarmActivityTypes': 'FarmCalendar',
+    'FarmAssets': 'FarmCalendar',
+    'FarmPlants': 'FarmCalendar',
+    'WeeklyWeatherForecast': 'WeatherService',
+}
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=10080),

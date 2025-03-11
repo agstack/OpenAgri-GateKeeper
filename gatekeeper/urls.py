@@ -8,12 +8,12 @@ from django.urls import path, include, re_path
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from aegis.views.home_view import HomeView
-from aegis.views.auth_views import LoginView#, RegisterView
 from aegis.views.api.auth_views import LoginAPIView, LogoutAPIView, TokenValidationAPIView#, RegisterAPIView
 from aegis.views.api.service_registry_views import (ServiceDirectoryAPIView, RegisterServiceAPIView,
                                                     DeleteServiceAPIView, NewReverseProxyAPIView)
 from .common import custom_page_not_found_view
 
+from .views import LoginView, reverse_proxy
 
 def robots_txt(request):
     return HttpResponse("User-agent: *\nDisallow: /", content_type="text/plain")
@@ -54,6 +54,11 @@ urlpatterns = [
 
     path("healthz", health_check, name="health_check"),
     path("robots.txt", robots_txt),
+]
+
+# reverse proxy urls
+urlpatterns += [
+    re_path(r'^api/resources/(?P<path>.*)$', reverse_proxy, name='reverse_proxy'),
 ]
 
 if settings.DEBUG:
