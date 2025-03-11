@@ -73,6 +73,8 @@ class LoginView(FormView):
                 # Determine the redirect URL
                 if next_url == "FarmCalendar":
                     next_url = settings.AVAILABLE_SERVICES.get(next_url, {}).get('post_auth')
+                elif next_url == "IrrigationManagement":
+                    next_url = settings.AVAILABLE_SERVICES.get(next_url, {}).get('post_auth')
                 elif not next_url:
                     next_url = self.success_url
 

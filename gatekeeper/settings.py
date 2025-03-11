@@ -33,10 +33,15 @@ AVAILABLE_SERVICES = {
         'api': os.getenv('FARM_CALENDAR_API', 'http://127.0.0.1:8002/api/'),
         'post_auth': os.getenv('FARM_CALENDAR_POST_AUTH', 'http://127.0.0.1:8002/post_auth/')
     },
-    'WeatherService': {
-        'api': 'http://external_weather/api/',
-        'post_auth': None,
+    'IrrigationManagement':
+    {
+        'api': os.getenv('IRM_API', 'http://127.0.0.1:5173/api/'),
+        'post_auth': os.getenv('IRM_POST_AUTH', 'http://127.0.0.1:5173/post_auth/')
     },
+    # 'WeatherService': {
+    #     'api': 'http://external_weather/api/',
+    #     'post_auth': None,
+    # },
 }
 
 INTERNAL_GK_URL = os.getenv('INTERNAL_GK_URL', 'http://gatekeeper:8001/')
@@ -352,5 +357,6 @@ LOGGING = {
 }
 
 FARM_CALENDAR = os.getenv('FARM_CALENDAR')
+IRM = os.getenv('IRM')
 
 GATEKEEPER_URL = os.getenv('GATEKEEPER_URL')

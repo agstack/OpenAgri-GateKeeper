@@ -3,8 +3,6 @@ services:
     image: ghcr.io/openagri-eu/gatekeeper:latest
     container_name: django_gatekeeper
     restart: no
-    environment:
-      - MAINTENANCE_MODE=OFF
     build: .
     env_file:
       - .env
@@ -15,15 +13,9 @@ services:
       - logs_volume:/var/www/logs
     ports:
       - "8001:8001"
-    networks:
-      - shared_network_gatekeeper
 
 volumes:
   asset_volume:
   media_volume:
   logs_volume:
 
-networks:
-  shared_network_gatekeeper:
-    external: true
-    driver: bridge
