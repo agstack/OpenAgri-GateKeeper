@@ -7,6 +7,9 @@
 **/assets/
 keys/
 traefik/
+nginx/
+mock_services/
+media/
 
 # Files
 .env
@@ -15,11 +18,6 @@ traefik/
 *.txt
 !requirements.txt
 *.log
-
-# Ignore all migration files, then re-include __init__.py
-#**/migrations/*
-#!**/migrations/__init__.py
-#!**/migrations/0001_initial.py  # Ensure initial migration file is not ignored
 
 # Image files - Ignore all, except in the 'static' folder
 *.jpg
