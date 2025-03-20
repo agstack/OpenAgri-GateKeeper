@@ -8,6 +8,9 @@
 #!**/migrations/
 keys/
 traefik/
+nginx/
+mock_services/
+media/
 
 .yarnrc.yml
 README.md
