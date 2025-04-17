@@ -382,6 +382,105 @@ method.
 
 ---
 
+### 6. Token Refresh
+
+**Endpoint:**
+```
+POST /api/token/refresh/
+```
+
+**Description:**
+Obtain a new access token by providing a valid refresh token.
+
+**Headers:**
+```
+Content-Type: application/json
+```
+
+**Request Body:**
+```
+{
+    "refresh": "string" // required, JWT refresh token
+}
+```
+
+**Success Response:**
+```
+{
+    "access": "string" // New JWT access token
+}
+```
+
+**Error Responses:**
+
+**400 Bad Request - Missing or incorrect refresh token**
+```
+{
+    "refresh": ["This field is required."]
+}
+```
+
+
+**401 Unauthorized - Invalid or expired refresh token**
+```
+{
+    "detail": "Token is invalid or expired",
+    "code": "token_not_valid"
+}
+```
+
+---
+
+### 7. Token Validation
+
+**Endpoint:**
+```
+POST /api/validate token/
+```
+
+**Description:**
+Validate an access or refresh token to check if it is still valid and obtain the remaining time until expiration.
+
+**Headers:**
+```
+Content-Type: application/json
+```
+
+**Request Body:**
+```
+{
+    "token": "string",      // required, JWT token to validate
+    "token_type": "string"  // optional, "access" (default) or "refresh"
+}
+```
+
+**Success Response:**
+```
+{
+    "success": true,
+    "remaining_time_in_seconds": number     // Time left before the token expires
+}
+```
+
+**Error Responses:**
+
+**400 Bad Request - Missing token**
+```
+{
+    "error": "Token is required"
+}
+```
+
+
+**400 Bad Request - Invalid token or incorrect token type**
+```
+{
+    "error": "Invalid access token"
+}
+```
+
+---
+
 ## Notes
 - Ensure that authentication tokens are handled securely.
 - The access token should be used in API requests requiring authentication.
