@@ -5,7 +5,7 @@
 **/assets/
 **/staticfiles/
 **/mysql_docker/
-#!**/migrations/
+**/mattermost/
 keys/
 traefik/
 nginx/

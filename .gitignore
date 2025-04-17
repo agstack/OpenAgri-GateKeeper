@@ -10,6 +10,7 @@ traefik/
 nginx/
 mock_services/
 media/
+**/mattermost/
 
 # Files
 .env
