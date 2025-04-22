@@ -23,8 +23,8 @@ ACCESS_TOKEN_SECRET = os.getenv('ACCESS_TOKEN_SECRET', 'default_access_token_sec
 REFRESH_TOKEN_SECRET = os.getenv('REFRESH_TOKEN_SECRET', 'default_refresh_token_secret')
 
 # Token expiration times
-ACCESS_TOKEN_EXPIRATION = timedelta(minutes=60)
-REFRESH_TOKEN_EXPIRATION = timedelta(days=1)
+# ACCESS_TOKEN_EXPIRATION = timedelta(minutes=10080)
+# REFRESH_TOKEN_EXPIRATION = timedelta(days=90)
 JWT_EXPIRATION = timedelta(hours=1)
 
 
