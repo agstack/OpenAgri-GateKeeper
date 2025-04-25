@@ -1,5 +1,6 @@
 # aegis/views/api/service_registry_views.py
 
+import json
 import logging
 import re
 import requests
@@ -382,17 +383,32 @@ class NewReverseProxyAPIView(APIView):
             print(f"Forwarding request to: {url}")
 
             headers = {key: value for key, value in request.headers.items() if key.lower() != 'host'}
-            data = request.body
+
+            data = None
+            json_data = None
+
+            # If the client sends JSON, decode it safely
+            if request.content_type == "application/json":
+                try:
+                    json_data = json.loads(request.body)
+                except json.JSONDecodeError:
+                    return JsonResponse({'error': 'Invalid JSON body.'}, status=400)
+            else:
+                # Fallback for other content types like form data, XML, etc.
+                data = request.body
 
             # Forward the request based on the HTTP method
             if request.method == 'GET':
                 response = requests.get(url, headers=headers, params=request.GET)
             elif request.method == 'POST':
-                response = requests.post(url, headers=headers, data=data)
+                response = requests.post(url, headers=headers, json=json_data if json_data is not None else None,
+                                         data=data)
             elif request.method == 'PUT':
-                response = requests.put(url, headers=headers, data=data)
+                response = requests.put(url, headers=headers, json=json_data if json_data is not None else None,
+                                        data=data)
             elif request.method == 'DELETE':
-                response = requests.delete(url, headers=headers, data=data)
+                response = requests.delete(url, headers=headers, json=json_data if json_data is not None else None,
+                                           data=data)
             else:
                 return JsonResponse({'error': 'Unsupported HTTP method.'}, status=405)
 
