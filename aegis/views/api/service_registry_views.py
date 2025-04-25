@@ -319,7 +319,7 @@ class NewReverseProxyAPIView(APIView):
 
             service_entry = None
             # Filter by service name
-            for service in services.filter():
+            for service in services:
                 # Ensure service.endpoint is valid
                 if not service.endpoint:
                     continue
@@ -401,34 +401,25 @@ class NewReverseProxyAPIView(APIView):
                     }, status=status.HTTP_400_BAD_REQUEST)
 
             # Forward the request based on the HTTP method
+            request_kwargs = {
+                'headers': headers,
+                'json': json_data if json_data is not None else None,
+                'data': None if json_data is not None else data
+            }
+
             if request.method == 'GET':
                 response = requests.get(url, headers=headers, params=request.GET)
             elif request.method == 'POST':
-                response = requests.post(
-                    url, headers=headers,
-                    json=json_data if json_data is not None else None,
-                    data=None if json_data is not None else data
-                )
+                response = requests.post(url, **request_kwargs)
             elif request.method == 'PUT':
-                response = requests.put(
-                    url, headers=headers,
-                    json=json_data if json_data is not None else None,
-                    data=None if json_data is not None else data
-                )
+                response = requests.put(url, **request_kwargs)
             elif request.method == 'DELETE':
-                response = requests.delete(
-                    url, headers=headers,
-                    json=json_data if json_data is not None else None,
-                    data=None if json_data is not None else data
-                )
+                response = requests.delete(url, **request_kwargs)
             elif request.method == 'PATCH':
-                response = requests.patch(
-                    url, headers=headers,
-                    json=json_data if json_data is not None else None,
-                    data=None if json_data is not None else data
-                )
+                response = requests.patch(url, **request_kwargs)
             else:
-                return JsonResponse({'error': 'Unsupported HTTP method.'}, status=405)
+                return JsonResponse({'error': 'Unsupported HTTP method.'},
+                                    status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
             # Return the response from the proxied service
             return HttpResponse(
