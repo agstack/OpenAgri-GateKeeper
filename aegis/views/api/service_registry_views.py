@@ -319,7 +319,7 @@ class NewReverseProxyAPIView(APIView):
 
             service_entry = None
             # Filter by service name
-            for service in services.filter():
+            for service in services:
                 # Ensure service.endpoint is valid
                 if not service.endpoint:
                     continue
@@ -387,30 +387,39 @@ class NewReverseProxyAPIView(APIView):
             data = None
             json_data = None
 
-            # If the client sends JSON, decode it safely
-            if request.content_type == "application/json":
+            try:
+                json_data = request.data
+            except Exception as e:
+                # Fallback to raw body if something goes wrong (e.g., invalid JSON)
                 try:
-                    json_data = json.loads(request.body)
-                except json.JSONDecodeError:
-                    return JsonResponse({'error': 'Invalid JSON body.'}, status=400)
-            else:
-                # Fallback for other content types like form data, XML, etc.
-                data = request.body
+                    data = request.body
+                except Exception as e2:
+                    return JsonResponse({
+                        'error': f'Failed to parse request body.',
+                        'detail': str(e2),
+                        'original_error': str(e)
+                    }, status=status.HTTP_400_BAD_REQUEST)
 
             # Forward the request based on the HTTP method
+            request_kwargs = {
+                'headers': headers,
+                'json': json_data if json_data is not None else None,
+                'data': None if json_data is not None else data
+            }
+
             if request.method == 'GET':
                 response = requests.get(url, headers=headers, params=request.GET)
             elif request.method == 'POST':
-                response = requests.post(url, headers=headers, json=json_data if json_data is not None else None,
-                                         data=data)
+                response = requests.post(url, **request_kwargs)
             elif request.method == 'PUT':
-                response = requests.put(url, headers=headers, json=json_data if json_data is not None else None,
-                                        data=data)
+                response = requests.put(url, **request_kwargs)
             elif request.method == 'DELETE':
-                response = requests.delete(url, headers=headers, json=json_data if json_data is not None else None,
-                                           data=data)
+                response = requests.delete(url, **request_kwargs)
+            elif request.method == 'PATCH':
+                response = requests.patch(url, **request_kwargs)
             else:
-                return JsonResponse({'error': 'Unsupported HTTP method.'}, status=405)
+                return JsonResponse({'error': 'Unsupported HTTP method.'},
+                                    status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
             # Return the response from the proxied service
             return HttpResponse(
@@ -433,3 +442,7 @@ class NewReverseProxyAPIView(APIView):
 
     def delete(self, request, path):
         return self.dispatch_request(request, path)
+
+    def patch(self, request, path):
+        return self.dispatch_request(request, path)
+
