@@ -37,11 +37,7 @@ AVAILABLE_SERVICES = {
     {
         'api': os.getenv('IRM_API', 'http://127.0.0.1:5173/api/'),
         'post_auth': os.getenv('IRM_POST_AUTH', 'http://127.0.0.1:5173/post_auth/')
-    },
-    # 'WeatherService': {
-    #     'api': 'http://external_weather/api/',
-    #     'post_auth': None,
-    # },
+    }
 }
 
 INTERNAL_GK_URL = os.getenv('INTERNAL_GK_URL', 'http://gatekeeper:8001/')
@@ -70,29 +66,28 @@ CSRF_TRUSTED_ORIGINS.extend([
 
 def generate_csrf_trusted_origins(base_domains):
     origins = []
+    dev_ports = ["8001", "8002", "8003", "8004", "8005", "8006"]
     for base in base_domains:
         # Add the base domain
         origins.append(f"https://{base}")
         # Add wildcard subdomains (e.g., *.example.com)
         origins.append(f"https://*.{base}")
+
+        if base in ["localhost", "127.0.0.1", "[::1]"]:
+            origins.append(f"http://{base}")
+            for port in dev_ports:
+                origins.append(f"http://{base}:{port}")
     return origins
 
 # Base domains and IPs you want to trust
-BASE_DOMAINS = [
-    'horizon-openagri.eu'
-]
+BASE_DOMAINS = [d.strip() for d in os.getenv("BASE_DOMAINS", "localhost").split(",") if d.strip()]
 
 CSRF_TRUSTED_ORIGINS = generate_csrf_trusted_origins(BASE_DOMAINS)
 
-# CSRF_TRUSTED_ORIGINS = [
-#     'https://gk.sip1.193.22.146.204.nip.io',
-#     'https://fc.sip1.193.22.146.204.nip.io',
-#     'https://horizon-openagri.eu',
-# ]
-
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-CSRF_COOKIE_SECURE = True
-SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_SECURE = not DEBUG
+CORS_URLS_REGEX = r"^/api/.*$"
 
 APPEND_SLASH = True
 
@@ -119,6 +114,7 @@ THIRD_PARTY_APPS = [
     'drf_yasg',
     'oauth2_provider',
     'rest_framework_simplejwt.token_blacklist',
+    'corsheaders'
 ]
 
 INSTALLED_APPS = DEFAULT_APPS + LOCAL_APPS + THIRD_PARTY_APPS
@@ -134,12 +130,13 @@ CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap4"
 CRISPY_TEMPLATE_PACK = "bootstrap4"
 
 LOGIN_URL = "login/"
-LOGOIN_REDIRECT_URL = 'aegis/dashboard/'  # Redirect to the login page
+LOGIN_REDIRECT_URL = 'aegis/dashboard/'  # Redirect to the login page
 LOGOUT_REDIRECT_URL = 'login'  # Redirect to the login page after logging out
 
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     "whitenoise.middleware.WhiteNoiseMiddleware",
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -150,6 +147,28 @@ MIDDLEWARE = [
     'gatekeeper.custom_middleware.ForceAppendSlashMiddleware.ForceAppendSlashMiddleware',
     # 'gatekeeper.custom_middleware.RequestLoggingMiddleware.RequestLoggingMiddleware',
 ]
+
+CORS_ALLOWED_ORIGIN_REGEXES = []
+
+# Add regex for wildcard subdomains in production domains
+for domain in BASE_DOMAINS:
+    if domain != "localhost":
+        CORS_ALLOWED_ORIGIN_REGEXES.append(
+            rf"^https://.*\.{domain.replace('.', r'\.')}$"
+        )
+
+# Always allow localhost with any port during development
+CORS_ALLOWED_ORIGIN_REGEXES.append(r"^http://localhost(:[0-9]+)?$")
+
+CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_HEADERS = [
+    "authorization",
+    "content-type",
+    "x-csrftoken",
+]
+
+CORS_ALLOW_METHODS = ["GET", "POST", "OPTIONS", "PUT", "PATCH", "DELETE"]
 
 ROOT_URLCONF = 'gatekeeper.urls'
 
@@ -300,8 +319,8 @@ SIMPLE_JWT = {
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'oauth2_provider.contrib.rest_framework.OAuth2Authentication',
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'oauth2_provider.contrib.rest_framework.OAuth2Authentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',

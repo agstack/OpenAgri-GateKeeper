@@ -1,6 +1,5 @@
 # aegis/views/api/service_registry_views.py
 
-import json
 import logging
 import re
 import requests

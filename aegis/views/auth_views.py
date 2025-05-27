@@ -2,7 +2,7 @@
 
 import requests
 
-from django import forms
+# from django import forms
 from django.conf import settings
 from django.http import HttpResponseRedirect
 from django.urls import reverse_lazy
@@ -14,7 +14,7 @@ from rest_framework import status
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
 
 from aegis.forms import UserRegistrationForm, UserLoginForm
-from aegis.services.auth_services import register_user
+# from aegis.services.auth_services import register_user
 
 
 @method_decorator(never_cache, name='dispatch')
@@ -49,13 +49,6 @@ class LoginView(FormView):
 
             login_url = f"{settings.INTERNAL_GK_URL}api/login/"
 
-            # Use the same authentication endpoint used by LoginAPIView to obtain tokens
-            # response = requests.post(
-            #     # request.build_absolute_uri(reverse_lazy('api_login')),
-            #     f"http://gatekeeper:8001/api/login/",  # Internal service URL
-            #     data={"username": username, "password": password}
-            # )
-
             try:
                 response = requests.post(
                     login_url,
@@ -83,7 +76,7 @@ class LoginView(FormView):
                 query = parse_qs(url_parts[4])  # Parse the existing query string
 
                 query["access_token"] = access_token
-                query["refresh"] = refresh_token
+                query["refresh_token"] = refresh_token
                 url_parts[4] = urlencode(query, doseq=True)
 
                 # Final redirect URL with tokens
