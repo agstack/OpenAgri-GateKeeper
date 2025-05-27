@@ -1,6 +1,6 @@
 services:
   web:
-    image: ghcr.io/openagri-eu/gatekeeper:reporting
+    image: ghcr.io/openagri-eu/gatekeeper:latest
     container_name: django_gatekeeper
     restart: no
     build: .
