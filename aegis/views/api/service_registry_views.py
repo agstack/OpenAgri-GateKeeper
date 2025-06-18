@@ -326,7 +326,8 @@ class NewReverseProxyAPIView(APIView):
                 # Check if the stored endpoint has placeholders
                 if '{' in service.endpoint and '}' in service.endpoint:
                     # Convert placeholders to a regex pattern
-                    pattern = re.sub(r"\{[^\}]+\}", r"[^/]+", service.endpoint)
+                    safe_endpoint = re.escape(service.endpoint)
+                    pattern = re.sub(r"\\\{[^\}]+\\\}", r"[^/]+", safe_endpoint)
 
                     # Match the incoming endpoint to the regex pattern
                     if re.fullmatch(pattern, endpoint):
@@ -393,10 +394,9 @@ class NewReverseProxyAPIView(APIView):
                 try:
                     data = request.body
                 except Exception as e2:
+                    logging.error(f"Error parsing request body. JSON error: {e}, fallback error: {e2}")
                     return JsonResponse({
-                        'error': f'Failed to parse request body.',
-                        'detail': str(e2),
-                        'original_error': str(e)
+                        'error': 'Failed to parse request body. Please ensure it is valid JSON or form data.'
                     }, status=status.HTTP_400_BAD_REQUEST)
 
             # Forward the request based on the HTTP method
@@ -428,7 +428,11 @@ class NewReverseProxyAPIView(APIView):
             )
 
         except Exception as e:
-            return JsonResponse({'error': f"Internal server error: {str(e)}"}, status=500)
+            logging.error(f"Unhandled exception occurred: {str(e)}", exc_info=True)
+            return JsonResponse(
+                {'error': "An internal server error occurred. Please try again later."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     def get(self, request, path):
         return self.dispatch_request(request, path)
