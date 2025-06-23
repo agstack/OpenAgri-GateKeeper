@@ -1,8 +1,9 @@
 # GateKeeper
-"This service was created in the context of OpenAgri project (https://horizon-openagri.eu/). OpenAgri has received funding from the EU’s Horizon Europe research and innovation programme under Grant Agreement no. 101134083."
+🇪🇺
+*"This service was created in the context of OpenAgri project (https://horizon-openagri.eu/). OpenAgri has received funding from the EU’s Horizon Europe research and innovation programme under Grant Agreement no. 101134083."*
 
-GateKeeper is a Django-based microservice designed to act as a central point for validation and authentication for 
-all of the following OpenAgri microservices. 
+GateKeeper is a Django-based microservice designed to act as a central point for validation and authentication for
+all of the following OpenAgri microservices.
 This application is dockerised, making it easy to deploy and manage using Docker and Docker Compose.
 - **Irrigation Management (IRM)**
 - **Weather Data (WD)**
