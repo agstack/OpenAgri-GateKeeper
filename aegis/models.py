@@ -186,3 +186,66 @@ class GroupCustomPermissions(BaseModel):
 
     def __str__(self):
         return f"{self.group} {str(self.permission_names)}"
+
+
+class BlacklistedRefresh(BaseModel):
+    """
+    A refresh token that has been 'logged out'.
+    Any access token minted from this refresh will carry rjti=<this JTI>
+    and must be rejected by authentication.
+    """
+    id = models.AutoField(
+        primary_key=True, db_column='id', db_index=True, editable=False, unique=True,
+        blank=False, null=False, verbose_name='ID'
+    )
+    # SimpleJWT uses a UUID for JTI; 64 keeps headroom
+    rjti = models.CharField(
+        max_length=64, unique=True, db_index=True, verbose_name='Refresh JTI'
+    )
+    expires_at = models.DateTimeField(verbose_name='Expires At')       # when the refresh naturally expires
+    blacklisted_at = models.DateTimeField(auto_now_add=True, verbose_name='Blacklisted At')
+
+    class Meta:
+        db_table = 'blacklisted_refresh_tokens'
+        verbose_name = 'Blacklisted Refresh Token'
+        verbose_name_plural = 'Blacklisted Refresh Tokens'
+        indexes = [
+            models.Index(fields=['expires_at'], name='blref_exp_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.rjti}"
+
+    @property
+    def is_expired(self) -> bool:
+        return timezone.now() >= self.expires_at
+
+
+class BlacklistedAccess(BaseModel):
+    """
+    A specific access token that should be rejected immediately.
+    """
+    id = models.AutoField(
+        primary_key=True, db_column='id', db_index=True, editable=False, unique=True,
+        blank=False, null=False, verbose_name='ID'
+    )
+    jti = models.CharField(
+        max_length=64, unique=True, db_index=True, verbose_name='Access JTI'
+    )
+    expires_at = models.DateTimeField(verbose_name='Expires At')
+    blacklisted_at = models.DateTimeField(auto_now_add=True, verbose_name='Blacklisted At')
+
+    class Meta:
+        db_table = 'blacklisted_access_tokens'
+        verbose_name = 'Blacklisted Access Token'
+        verbose_name_plural = 'Blacklisted Access Tokens'
+        indexes = [
+            models.Index(fields=['expires_at'], name='blacc_exp_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.jti}"
+
+    @property
+    def is_expired(self) -> bool:
+        return timezone.now() >= self.expires_at
