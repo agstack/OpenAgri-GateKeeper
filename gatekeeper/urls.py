@@ -9,7 +9,7 @@ from django.urls import path, include, re_path
 
 from rest_framework_simplejwt.views import TokenRefreshView
 
-from aegis.views import LoginView
+from aegis.views import LoginView, WhoAmIView
 from aegis.views.home_view import HomeView
 from aegis.views.api.auth_views import LoginAPIView, LogoutAPIView, TokenValidationAPIView#, RegisterAPIView
 from aegis.views.api.service_registry_views import (ServiceDirectoryAPIView, RegisterServiceAPIView,
@@ -29,7 +29,7 @@ def health_check(request):
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
 urlpatterns = [
-    path('o/', include('oauth2_provider.urls', namespace='oauth2_provider')),
+    # path('o/', include('oauth2_provider.urls', namespace='oauth2_provider')),
 
     path('', HomeView.as_view(), name='home'),
 
@@ -54,6 +54,8 @@ urlpatterns = [
 
     path("healthz", health_check, name="health_check"),
     path("robots.txt", robots_txt),
+
+    path("api/whoami/", WhoAmIView.as_view(), name="whoami"),
 ]
 
 if settings.DEBUG:
