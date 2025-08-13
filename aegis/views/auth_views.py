@@ -11,6 +11,9 @@ from django.views.decorators.cache import never_cache
 from django.views.generic.edit import FormView
 
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
 
 from aegis.forms import UserRegistrationForm, UserLoginForm
@@ -135,3 +138,9 @@ class LoginView(FormView):
 #                 form.add_error(None, f"An unexpected error occurred: {str(e)}")
 #
 #         return self.render_to_response(self.get_context_data(form=form))
+
+
+class WhoAmIView(APIView):
+    permission_classes = [IsAuthenticated]
+    def get(self, request):
+        return Response({"user": str(request.user)}, status=200)

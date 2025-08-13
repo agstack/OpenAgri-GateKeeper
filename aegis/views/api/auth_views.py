@@ -18,9 +18,11 @@ from datetime import datetime, timezone
 
 # from aegis.forms import UserRegistrationForm
 # from aegis.services.auth_services import register_user
+from aegis.models import BlacklistedRefresh, BlacklistedAccess
 from aegis.serializers import CustomTokenObtainPairSerializer
 
 logging.basicConfig(level=logging.ERROR)
+logger = logging.getLogger(__name__)
 
 
 @method_decorator(never_cache, name='dispatch')
@@ -76,14 +78,43 @@ class LogoutAPIView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        auth = request.headers.get("Authorization", "")
+
+        if auth.startswith("Bearer "):
+            raw_access = auth.split(" ", 1)[1].strip()
+            try:
+                at = AccessToken(raw_access)  # verifies signature & token_type=access
+                BlacklistedAccess.objects.update_or_create(
+                    jti=str(at["jti"]),
+                    defaults={"expires_at": datetime.fromtimestamp(at["exp"], tz=timezone.utc)},
+                )
+                logger.info("Logout: blacklisted ACCESS jti=%s exp=%s", at["jti"], at["exp"])
+            except Exception as e:
+                logger.warning("Logout: failed to parse access token from Authorization header: %s", e)
+        else:
+            logger.info("Logout: no Authorization Bearer header; skipping access JTI blacklist")
+
         refresh_token = request.data.get("refresh")
 
         if not refresh_token:
             return Response({"error": "Refresh token is required"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            token = RefreshToken(refresh_token)
-            token.blacklist()
+            rt = RefreshToken(refresh_token)  # parse & validate refresh
+            rjti = str(rt["jti"])
+            exp = datetime.fromtimestamp(rt["exp"], tz=timezone.utc)
+
+            # 1) Persist rjti so all access tokens minted from this refresh are rejected
+            BlacklistedRefresh.objects.update_or_create(
+                rjti=rjti,
+                defaults={"expires_at": exp},
+            )
+
+            # 2) Also blacklist the refresh for future refresh attempts
+            rt.blacklist()  # requires 'rest_framework_simplejwt.token_blacklist' in INSTALLED_APPS+migrations
+
+            # token = RefreshToken(refresh_token)
+            # token.blacklist()
             return Response({"success": "Logged out successfully"}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": "Invalid or expired token"}, status=status.HTTP_400_BAD_REQUEST)

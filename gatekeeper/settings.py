@@ -1,5 +1,6 @@
 import dj_database_url
 import os
+import re
 
 from datetime import timedelta
 from dotenv import load_dotenv
@@ -50,44 +51,100 @@ ALLOWED_HOSTS = ['localhost', '127.0.0.1', '[::1]']
 EXTRA_ALLOWED_HOSTS = os.environ.get('EXTRA_ALLOWED_HOSTS', '')
 
 if EXTRA_ALLOWED_HOSTS:
-    # EXTRA_ALLOWED_HOSTS = EXTRA_ALLOWED_HOSTS.split(',')
     EXTRA_ALLOWED_HOSTS = [host.strip() for host in EXTRA_ALLOWED_HOSTS.split(',') if host.strip()]
     ALLOWED_HOSTS.extend(EXTRA_ALLOWED_HOSTS)
-
-# Generate CSRF_TRUSTED_ORIGINS from ALLOWED_HOSTS
-CSRF_TRUSTED_ORIGINS = [
-    f"https://{host}" for host in ALLOWED_HOSTS if not host.startswith('.')
-]
-
-# Add specific handling for wildcard subdomains
-CSRF_TRUSTED_ORIGINS.extend([
-    f"https://{host[1:]}" for host in ALLOWED_HOSTS if host.startswith('.')
-])
 
 def generate_csrf_trusted_origins(base_domains):
     origins = []
     dev_ports = ["8001", "8002", "8003", "8004", "8005", "8006"]
     for base in base_domains:
-        # Add the base domain
-        origins.append(f"https://{base}")
-        # Add wildcard subdomains (e.g., *.example.com)
-        origins.append(f"https://*.{base}")
+        base = base.strip()
+        if not base:
+            continue
 
-        if base in ["localhost", "127.0.0.1", "[::1]"]:
+        # Normalise '.example.com' -> 'example.com'
+        if base.startswith('.'):
+            base = base[1:]
+
+        if base in ("localhost", "127.0.0.1", "[::1]"):
+            # Local dev: accept http/https and common ports
             origins.append(f"http://{base}")
+            origins.append(f"https://{base}")
             for port in dev_ports:
                 origins.append(f"http://{base}:{port}")
-    return origins
+        else:
+            # Public base: allow exact and wildcard subdomains
+            origins.append(f"https://{base}")
+            origins.append(f"https://*.{base}")
 
-# Base domains and IPs you want to trust
-BASE_DOMAINS = [d.strip() for d in os.getenv("BASE_DOMAINS", "localhost").split(",") if d.strip()]
+    # De-duplicate while keeping order
+    seen = set()
+    deduped = []
+    for o in origins:
+        if o not in seen:
+            seen.add(o)
+            deduped.append(o)
+    return deduped
 
+
+_extra_hosts_raw = os.getenv("EXTRA_ALLOWED_HOSTS", "")
+_extra_hosts = [h.strip() for h in _extra_hosts_raw.split(",") if h.strip()]
+
+BASE_DOMAINS = []
+for h in _extra_hosts:
+    if h in ("localhost", "127.0.0.1", "[::1]"):
+        BASE_DOMAINS.append(h)
+    elif h.startswith("."):
+        BASE_DOMAINS.append(h.lstrip("."))  # ".example.com" -> "example.com"
+    elif h.count(".") == 1 and not h.startswith("."):
+        BASE_DOMAINS.append(h)  # treat bare base as a base
+
+# Fallback for local dev if nothing matched
+if not BASE_DOMAINS:
+    BASE_DOMAINS = ["localhost", "127.0.0.1", "[::1]"]
+
+# CSRF: build once, from BASE_DOMAINS (includes wildcard for subdomains)
 CSRF_TRUSTED_ORIGINS = generate_csrf_trusted_origins(BASE_DOMAINS)
 
+# Behind Traefik at proxy: trust forwarded scheme/host for CSRF/redirects
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_X_FORWARDED_HOST = True
+
+# Secure cookies
 CSRF_COOKIE_SECURE = not DEBUG
 SESSION_COOKIE_SECURE = not DEBUG
+
+# Scope CORS to API paths
 CORS_URLS_REGEX = r"^/api/.*$"
+
+# CORS: allow base domain and any subdomain for each BASE_DOMAIN; plus localhost
+CORS_ALLOWED_ORIGIN_REGEXES = []
+for base in BASE_DOMAINS:
+    d = base.lstrip(".").strip()
+    if not d:
+        continue
+
+    if d in ("localhost", "127.0.0.1", "[::1]"):
+        # Local dev, http/https with optional port
+        CORS_ALLOWED_ORIGIN_REGEXES.extend([
+            r"^http://localhost(?::\d+)?$",
+            r"^http://127\.0\.0\.1(?::\d+)?$",
+            r"^https://localhost(?::\d+)?$",
+            r"^https://127\.0\.0\.1(?::\d+)?$",
+        ])
+    else:
+        # Allow base and any depth of subdomains over https
+        CORS_ALLOWED_ORIGIN_REGEXES.append(
+            rf"^https://([a-z0-9-]+\.)*{re.escape(d)}$"
+        )
+
+# De-duplicate (preserve order)
+CORS_ALLOWED_ORIGIN_REGEXES = list(dict.fromkeys(CORS_ALLOWED_ORIGIN_REGEXES))
+
+CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_HEADERS = ["authorization", "content-type", "x-csrftoken"]
+CORS_ALLOW_METHODS = ["GET", "POST", "OPTIONS", "PUT", "PATCH", "DELETE"]
 
 APPEND_SLASH = True
 
@@ -112,7 +169,7 @@ THIRD_PARTY_APPS = [
     'django.contrib.sites',
     'rest_framework',
     'drf_yasg',
-    'oauth2_provider',
+    # 'oauth2_provider',
     'rest_framework_simplejwt.token_blacklist',
     'corsheaders'
 ]
@@ -147,28 +204,6 @@ MIDDLEWARE = [
     'gatekeeper.custom_middleware.ForceAppendSlashMiddleware.ForceAppendSlashMiddleware',
     # 'gatekeeper.custom_middleware.RequestLoggingMiddleware.RequestLoggingMiddleware',
 ]
-
-CORS_ALLOWED_ORIGIN_REGEXES = []
-
-# Add regex for wildcard subdomains in production domains
-for domain in BASE_DOMAINS:
-    if domain != "localhost":
-        CORS_ALLOWED_ORIGIN_REGEXES.append(
-            rf"^https://.*\.{domain.replace('.', r'\.')}$"
-        )
-
-# Always allow localhost with any port during development
-CORS_ALLOWED_ORIGIN_REGEXES.append(r"^http://localhost(:[0-9]+)?$")
-
-CORS_ALLOW_CREDENTIALS = True
-
-CORS_ALLOW_HEADERS = [
-    "authorization",
-    "content-type",
-    "x-csrftoken",
-]
-
-CORS_ALLOW_METHODS = ["GET", "POST", "OPTIONS", "PUT", "PATCH", "DELETE"]
 
 ROOT_URLCONF = 'gatekeeper.urls'
 
@@ -272,19 +307,6 @@ AUTH_USER_MODEL = 'aegis.DefaultAuthUserExtend'
 DJANGO_PORT = os.getenv('DJANGO_PORT', '8001')
 
 
-# geting from env var from now, but in the future this infos should
-# come with the service registration post request
-AVAILABLE_SERVICES = {
-    'FarmCalendar':
-    {
-        'api': os.getenv('FARM_CALENDAR_API', 'http://127.0.0.1:8002/api/'),
-        'post_auth': os.getenv('FARM_CALENDAR_POST_AUTH', 'http://127.0.0.1:8002/post_auth/')
-    },
-    'WeatherService': {
-        'api': 'http://external_weather/api/',
-        'post_auth': None,
-    },
-}
 # same with this data, also cames in the service announcement
 # in the service registration endpoint
 REVERSE_PROXY_MAPPING = {
@@ -319,8 +341,9 @@ SIMPLE_JWT = {
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-        'oauth2_provider.contrib.rest_framework.OAuth2Authentication',
+        # 'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'aegis.authentication.JWTAuthenticationWithDenylist',
+        # 'oauth2_provider.contrib.rest_framework.OAuth2Authentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
@@ -335,16 +358,16 @@ REST_FRAMEWORK = {
     }
 }
 
-OAUTH2_PROVIDER = {
-    'ACCESS_TOKEN_EXPIRE_SECONDS': 36000,
-    'REFRESH_TOKEN_EXPIRE_SECONDS': 864000,
-
-    'SCOPES': {
-        'read': 'Read scope',
-        'write': 'Write scope',
-        'groups': 'Access to your groups',
-    }
-}
+# OAUTH2_PROVIDER = {
+#     'ACCESS_TOKEN_EXPIRE_SECONDS': 36000,
+#     'REFRESH_TOKEN_EXPIRE_SECONDS': 864000,
+#
+#     'SCOPES': {
+#         'read': 'Read scope',
+#         'write': 'Write scope',
+#         'groups': 'Access to your groups',
+#     }
+# }
 
 LOGGING = {
     'version': 1,
