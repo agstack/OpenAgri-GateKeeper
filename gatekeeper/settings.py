@@ -25,6 +25,8 @@ SECRET_KEY = get_env_var('DJANGO_SECRET_KEY')
 
 JWT_SIGNING_KEY = get_env_var('JWT_SIGNING_KEY')
 JWT_ALG = os.environ.get('JWT_ALG', "HS256")
+JWT_ACCESS_TOKEN_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_MINUTES", "60"))
+JWT_REFRESH_TOKEN_DAYS = int(os.getenv("JWT_REFRESH_TOKEN_DAYS", "30"))
 
 # geting from env var from now, but in the future this infos should
 # come with the service registration post request
@@ -53,6 +55,8 @@ EXTRA_ALLOWED_HOSTS = os.environ.get('EXTRA_ALLOWED_HOSTS', '')
 if EXTRA_ALLOWED_HOSTS:
     EXTRA_ALLOWED_HOSTS = [host.strip() for host in EXTRA_ALLOWED_HOSTS.split(',') if host.strip()]
     ALLOWED_HOSTS.extend(EXTRA_ALLOWED_HOSTS)
+
+ALLOWED_HOSTS = list(dict.fromkeys(ALLOWED_HOSTS))
 
 def generate_csrf_trusted_origins(base_domains):
     origins = []
@@ -90,18 +94,14 @@ def generate_csrf_trusted_origins(base_domains):
 _extra_hosts_raw = os.getenv("EXTRA_ALLOWED_HOSTS", "")
 _extra_hosts = [h.strip() for h in _extra_hosts_raw.split(",") if h.strip()]
 
-BASE_DOMAINS = []
+BASE_DOMAINS = ["localhost", "127.0.0.1", "[::1]"]
 for h in _extra_hosts:
-    if h in ("localhost", "127.0.0.1", "[::1]"):
-        BASE_DOMAINS.append(h)
-    elif h.startswith("."):
+    if h.startswith("."):
         BASE_DOMAINS.append(h.lstrip("."))  # ".example.com" -> "example.com"
     elif h.count(".") == 1 and not h.startswith("."):
         BASE_DOMAINS.append(h)  # treat bare base as a base
 
-# Fallback for local dev if nothing matched
-if not BASE_DOMAINS:
-    BASE_DOMAINS = ["localhost", "127.0.0.1", "[::1]"]
+BASE_DOMAINS = list(dict.fromkeys(BASE_DOMAINS))
 
 # CSRF: build once, from BASE_DOMAINS (includes wildcard for subdomains)
 CSRF_TRUSTED_ORIGINS = generate_csrf_trusted_origins(BASE_DOMAINS)
@@ -318,10 +318,10 @@ REVERSE_PROXY_MAPPING = {
 }
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=10080),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=90),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=JWT_ACCESS_TOKEN_MINUTES),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=JWT_REFRESH_TOKEN_DAYS),
     'ROTATE_REFRESH_TOKENS': False,
-    'BLACKLIST_AFTER_ROTATION': True,
+    # 'BLACKLIST_AFTER_ROTATION': True, # Don't need this as refresh token rotation is false
     'UPDATE_LAST_LOGIN': True,
 
     'ALGORITHM': JWT_ALG,
