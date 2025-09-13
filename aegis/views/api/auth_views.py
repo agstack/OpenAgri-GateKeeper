@@ -2,12 +2,14 @@
 
 import logging
 
+from collections import defaultdict
+
 # from django import forms
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 
 from rest_framework import status, permissions
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
@@ -18,7 +20,7 @@ from datetime import datetime, timezone
 
 # from aegis.forms import UserRegistrationForm
 # from aegis.services.auth_services import register_user
-from aegis.models import BlacklistedRefresh, BlacklistedAccess
+from aegis.models import BlacklistedRefresh, BlacklistedAccess, CustomPermissions, GroupCustomPermissions
 from aegis.serializers import CustomTokenObtainPairSerializer
 
 logging.basicConfig(level=logging.ERROR)
@@ -165,3 +167,78 @@ class TokenValidationAPIView(APIView):
             return Response({
                 "error": "Token has already expired"
             }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class MeAPIView(APIView):
+    """
+    GET /api/me/  -> returns the authenticated user's profile and service permissions.
+    Requires: Authorization: Bearer <access_token>
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        u = request.user
+
+        # Basic identity payload
+        groups = list(u.groups.values_list("name", flat=True))
+        user_payload = {
+            "uuid": str(getattr(u, "uuid", "")),
+            "username": u.username,
+            "email": u.email,
+            "first_name": u.first_name,
+            "last_name": u.last_name,
+            "groups": groups,
+        }
+
+        # Build "services" payload
+        svc_map = defaultdict(lambda: {"name": None, "actions": set()})
+
+        # via group custom permissions
+        group_rows = (
+            GroupCustomPermissions.objects
+            .filter(
+                group__in=u.groups.all(), status=1,
+                permission_names__status=1,
+                permission_names__service__status=1,
+            )
+            .values_list(
+                "permission_names__service__service_code",
+                "permission_names__service__service_name",
+                "permission_names__action",
+            )
+        )
+        for code, name, action in group_rows:
+            if code and action:
+                if not svc_map[code]["name"]:
+                    svc_map[code]["name"] = name
+                svc_map[code]["actions"].add(action)
+
+        # via direct user custom permissions
+        user_rows = (
+            CustomPermissions.objects
+            .filter(
+                user=u, status=1,
+                permission_name__status=1,
+                permission_name__service__status=1,
+            )
+            .values_list(
+                "permission_name__service__service_code",
+                "permission_name__service__service_name",
+                "permission_name__action",
+            )
+        )
+        for code, name, action in user_rows:
+            if code and action:
+                if not svc_map[code]["name"]:
+                    svc_map[code]["name"] = name
+                svc_map[code]["actions"].add(action)
+
+        services_payload = [
+            {"code": code, "name": data["name"] or code, "actions": sorted(data["actions"])}
+            for code, data in sorted(svc_map.items())
+        ]
+
+        return Response({
+            "user": user_payload,
+            "services": services_payload,
+        }, status=status.HTTP_200_OK)

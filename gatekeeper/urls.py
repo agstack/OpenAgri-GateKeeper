@@ -11,7 +11,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from aegis.views import LoginView, WhoAmIView
 from aegis.views.home_view import HomeView
-from aegis.views.api.auth_views import LoginAPIView, LogoutAPIView, TokenValidationAPIView#, RegisterAPIView
+from aegis.views.api.auth_views import LoginAPIView, LogoutAPIView, TokenValidationAPIView, MeAPIView #, RegisterAPIView
 from aegis.views.api.service_registry_views import (ServiceDirectoryAPIView, RegisterServiceAPIView,
                                                     DeleteServiceAPIView, NewReverseProxyAPIView)
 from .common import custom_page_not_found_view
@@ -38,6 +38,7 @@ urlpatterns = [
     path('login/', LoginView.as_view(), name='login'),
     # path('register/', RegisterView.as_view(), name='register'),
 
+    path('api/me/', MeAPIView.as_view(), name='api_me'),
     path('api/login/', LoginAPIView.as_view(), name='api_login'),
     path('api/logout/', LogoutAPIView.as_view(), name='api_logout'),
     # path('api/register/', RegisterAPIView.as_view(), name='api_register'),
