@@ -141,18 +141,18 @@ class PermissionMaster(BaseModel):
     id = models.AutoField(primary_key=True, db_column='id', db_index=True, editable=False, unique=True,
                           blank=False, null=False, verbose_name='ID')
 
-    menu = models.ForeignKey(AdminMenuMaster, on_delete=models.CASCADE)
+    service = models.ForeignKey('ServiceMaster', on_delete=models.CASCADE, null=True, blank=True)
     action = models.CharField(max_length=20, choices=ACTION_CHOICES)
     is_virtual = models.BooleanField(default=False)
 
     class Meta:
-        unique_together = ('menu', 'action')
         db_table = "permission_master"
         verbose_name = "Permission"
         verbose_name_plural = "Permissions"
+        # unique_together = ('service', 'action')
 
     def __str__(self):
-        return f"{self.menu.menu_route}_{self.action}"
+        return f"{self.service.service_code}_{self.action}"
 
 
 class CustomPermissions(BaseModel):
@@ -249,3 +249,40 @@ class BlacklistedAccess(BaseModel):
     @property
     def is_expired(self) -> bool:
         return timezone.now() >= self.expires_at
+
+
+class ServiceMaster(BaseModel):
+    """
+    Normalised list of services (one row per service).
+    """
+    service_code = models.CharField(max_length=50, unique=True)
+    service_name = models.CharField(max_length=100, unique=True)
+    service_description = models.TextField(blank=True, null=True)
+
+    class Meta:
+        db_table = 'service_master'
+        verbose_name = 'Service'
+        verbose_name_plural = 'Services'
+        ordering = ('service_code',)
+
+    def __str__(self):
+        return f"{self.service_name} ({self.service_code})"
+
+
+class GroupServiceAccess(BaseModel):
+    """
+    One row means: this Group can access this Service.
+    Keep it minimal (no per-action scopes for now).
+    """
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="service_links")
+    service = models.ForeignKey(ServiceMaster, on_delete=models.CASCADE, related_name="group_links")
+
+    class Meta:
+        db_table = "group_service_access"
+        unique_together = (("group", "service"),)
+        verbose_name = "Group Service Access"
+        verbose_name_plural = "Group Services Access"
+
+    def __str__(self):
+        return f"{self.group.name} → {self.service.service_code}"
+
