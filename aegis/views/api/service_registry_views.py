@@ -3,10 +3,14 @@
 import logging
 import re
 import requests
+import uuid
+import requests
+
+from typing import Optional
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, DatabaseError
-from django.http import JsonResponse, HttpResponse, HttpResponseRedirect
+from django.http import JsonResponse, HttpResponse, HttpResponseRedirect, StreamingHttpResponse
 from django.urls import reverse
 from django.utils import timezone
 
@@ -17,6 +21,7 @@ from rest_framework.views import APIView
 from aegis.models import RegisteredService
 from aegis.utils.service_utils import match_endpoint
 
+LOG = logging.getLogger(__name__)
 
 class RegisterServiceAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -285,26 +290,50 @@ class DeleteServiceAPIView(APIView):
 
 class NewReverseProxyAPIView(APIView):
     permission_classes = [IsAuthenticated]
+    parser_classes = []
 
     def dispatch(self, request, *args, **kwargs):
         # Check if the path ends with a slash; if not, redirect to the normalized path
         path = kwargs.get('path', '')
         if not path.endswith('/'):
             # Normalize the URL by adding a trailing slash
-            new_path = f"{path}/"
-            # Redirect to the new path
-            return HttpResponseRedirect(reverse('new_reverse_proxy', kwargs={'path': new_path}))
+            # new_path = f"{path}/"
+
+            kwargs['path'] = f"{path}/"
+            # return HttpResponseRedirect(reverse('new_reverse_proxy', kwargs={'path': new_path}))
+            return super().dispatch(request, *args, **kwargs)
 
         return super().dispatch(request, *args, **kwargs)
 
+    @staticmethod
+    def _scrub_auth(h: Optional[str]) -> str:
+        """Hide secrets in Authorization header in logs."""
+        if not h:
+            return "-"
+        hl = h.lower()
+        if hl.startswith("bearer "):
+            return "Bearer ***"
+        if hl.startswith("basic "):
+            return "Basic ***"
+        return "***"
+
     def dispatch_request(self, request, path):
         try:
+            # -------- Correlation + basic request info --------
+            corr_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+            req_ct = (request.META.get("CONTENT_TYPE") or "").lower()
+            req_cl = request.META.get("CONTENT_LENGTH")
+            client_ip = request.META.get("REMOTE_ADDR") or "-"
+
             print(f"Incoming path: {path}")
 
             # Parse the path to determine service and endpoint
             path_parts = path.split('/')
             service_name = path_parts[0] if len(path_parts) > 0 else None
             endpoint = '/'.join(path_parts[1:]) if len(path_parts) > 1 else None
+
+            LOG.info("GK IN ↘ method=%s path=%s svc=%s ip=%s ct=%s cl=%s corr=%s",
+                     request.method, path, service_name, client_ip, req_ct, req_cl, corr_id)
 
             if service_name:
                 print(f"Service Name: {service_name}")
@@ -345,16 +374,13 @@ class NewReverseProxyAPIView(APIView):
                     continue
 
             if not service_entry:
+                LOG.warning("GK ROUTE ✖ no match svc=%s endpoint=%s corr=%s", service_name, endpoint, corr_id)
                 return JsonResponse({'error': 'No service can provide this resource.'}, status=404)
-
-            # Replace placeholders in the stored endpoint with actual values from the request
-            resolved_endpoint = service_entry.endpoint
-            for part, placeholder in zip(endpoint.split('/'), resolved_endpoint.split('/')):
-                if placeholder.startswith("{") and placeholder.endswith("}"):
-                    resolved_endpoint = resolved_endpoint.replace(placeholder, part)
 
             # Check if the method is supported
             if request.method not in service_entry.methods:
+                LOG.warning("GK ROUTE ✖ method-not-allowed method=%s svc=%s corr=%s",
+                            request.method, service_entry.service_name, corr_id)
                 return JsonResponse(
                     {'error': f"Method {request.method} not allowed for this endpoint."},
                     status=405
@@ -372,63 +398,148 @@ class NewReverseProxyAPIView(APIView):
                     for placeholder, incoming in zip(resolved_endpoint_parts, incoming_parts)
                 )
 
+            # -------- Build upstream URL (query handled via params=request.GET) --------
+            upstream_url = f"{service_entry.base_url}{resolved_endpoint.lstrip('/')}"
+            LOG.info("GK ROUTE → upstream=%s svc=%s corr=%s",
+                     upstream_url, service_entry.service_name, corr_id)
+
             # Construct the target service URL
-            print("service_entry.base_url: ", service_entry.base_url)
-            url = f"{service_entry.base_url}{resolved_endpoint.lstrip('/')}"
-            query_string = request.META.get('QUERY_STRING', '')
+            # print("service_entry.base_url: ", service_entry.base_url)
+            # url = f"{service_entry.base_url}{resolved_endpoint.lstrip('/')}"
 
-            if query_string:
-                url = f"{url}?{query_string}"
+            # query_string = request.META.get('QUERY_STRING', '')
+            #
+            # if query_string:
+            #     url = f"{url}?{query_string}"
 
-            print(f"Forwarding request to: {url}")
-
-            headers = {key: value for key, value in request.headers.items() if key.lower() != 'host'}
-
-            data = None
-            json_data = None
-
-            try:
-                json_data = request.data
-            except Exception as e:
-                # Fallback to raw body if something goes wrong (e.g., invalid JSON)
-                try:
-                    data = request.body
-                except Exception as e2:
-                    logging.error(f"Error parsing request body. JSON error: {e}, fallback error: {e2}")
-                    return JsonResponse({
-                        'error': 'Failed to parse request body. Please ensure it is valid JSON or form data.'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-
-            # Forward the request based on the HTTP method
-            request_kwargs = {
-                'headers': headers,
-                'json': json_data if json_data is not None else None,
-                'data': None if json_data is not None else data
+            # -------- Forward headers (strip hop-by-hop; add X-Forwarded-*; propagate corr id) --------
+            hop_by_hop = {
+                "host", "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
+                "te", "trailers", "transfer-encoding", "upgrade"
             }
 
-            if request.method == 'GET':
-                response = requests.get(url, headers=headers, params=request.GET)
-            elif request.method == 'POST':
-                response = requests.post(url, **request_kwargs)
-            elif request.method == 'PUT':
-                response = requests.put(url, **request_kwargs)
-            elif request.method == 'DELETE':
-                response = requests.delete(url, **request_kwargs)
-            elif request.method == 'PATCH':
-                response = requests.patch(url, **request_kwargs)
-            else:
-                return JsonResponse({'error': 'Unsupported HTTP method.'},
-                                    status=status.HTTP_405_METHOD_NOT_ALLOWED)
+            # LOG.info("GK IN ↘ method=%s path=%s svc=%s url=%s ip=%s ct=%s cl=%s corr=%s",
+            #          request.method, path, service_entry.service_name, "TBD", client_ip, req_ct, req_cl, corr_id)
 
-            # Return the response from the proxied service
-            return HttpResponse(
-                response.content,
-                status=response.status_code,
-                content_type=response.headers.get('Content-Type', 'application/json')
-            )
+            forward_headers = {}
+            for k, v in request.headers.items():
+                if k.lower() not in hop_by_hop:
+                    forward_headers[k] = v
+
+            # Normalise forwards
+            existing_xff = forward_headers.get("X-Forwarded-For")
+            forward_headers["X-Forwarded-For"] = f"{existing_xff}, {client_ip}" if existing_xff else (client_ip or "-")
+            forward_headers["X-Forwarded-Proto"] = request.scheme
+            forward_headers["X-Request-ID"] = corr_id
+
+            LOG.debug("GK HEADERS → base=%s Auth=%s Content-Type=%s corr=%s",
+                      service_entry.base_url,
+                      self._scrub_auth(request.headers.get("Authorization")),
+                      req_ct, corr_id)
+
+            # Read the exact bytes once
+            raw_body = request.body
+            body_len = len(raw_body or b"")
+            boundary = None
+            m = re.search(r'boundary=([^;]+)', req_ct or "")
+            if m:
+                boundary = m.group(1)
+
+            # For JSON/text, preview first 300 chars; for others, just size/boundary
+            if req_ct.startswith("application/json"):
+                preview = raw_body.decode(errors="ignore")[:300]
+                LOG.debug("GK BODY (json) len=%s preview=%r corr=%s", body_len, preview, corr_id)
+            elif req_ct.startswith("multipart/form-data"):
+                LOG.debug("GK BODY (multipart) len=%s boundary=%s corr=%s", body_len, boundary, corr_id)
+            else:
+                LOG.debug("GK BODY (octet/other) len=%s ct=%s corr=%s", body_len, req_ct, corr_id)
+
+            # 3) Build kwargs for the upstream request
+            request_kwargs = {
+                "headers": forward_headers,
+                "params": request.GET,  # keep query string
+                "stream": True,  # stream response back
+                "timeout": (10, 300),  # (connect, read)
+            }
+
+            # POST/PUT/PATCH/DELETE may carry bodies; GET usually shouldn't
+            method = request.method.upper()
+            if method in ("POST", "PUT", "PATCH", "DELETE"):
+                # Always pass exact bytes to preserve multipart boundary & file payload
+                request_kwargs["data"] = raw_body
+
+            # -------- Call upstream --------
+            resp = requests.request(method, upstream_url, **request_kwargs)
+
+            resp_ct = resp.headers.get("Content-Type", "")
+            resp_cl = resp.headers.get("Content-Length")
+            LOG.info("GK OUT ↗ method=%s status=%s ct=%s cl=%s corr=%s",
+                     method, resp.status_code, resp_ct, resp_cl, corr_id)
+
+            if resp.status_code >= 400:
+                try:
+                    if ("application/json" in resp_ct) or ("text/" in resp_ct):
+                        LOG.warning("UPSTREAM ERR preview corr=%s: %s", corr_id, resp.text[:1500])
+                    else:
+                        LOG.warning("UPSTREAM ERR non-text body corr=%s", corr_id)
+                except Exception:
+                    LOG.warning("UPSTREAM ERR (no preview) corr=%s", corr_id)
+
+            excluded_resp = {"content-encoding", "transfer-encoding", "connection"}
+            django_resp = StreamingHttpResponse(resp.iter_content(chunk_size=64 * 1024),
+                                                status=resp.status_code)
+
+            for k, v in resp.headers.items():
+                if k.lower() not in excluded_resp:
+                    django_resp[k] = v
+
+            return django_resp
+
+            # data = None
+            # json_data = None
+            #
+            # try:
+            #     json_data = request.data
+            # except Exception as e:
+            #     # Fallback to raw body if something goes wrong (e.g., invalid JSON)
+            #     try:
+            #         data = request.body
+            #     except Exception as e2:
+            #         logging.error(f"Error parsing request body. JSON error: {e}, fallback error: {e2}")
+            #         return JsonResponse({
+            #             'error': 'Failed to parse request body. Please ensure it is valid JSON or form data.'
+            #         }, status=status.HTTP_400_BAD_REQUEST)
+            #
+            # # Forward the request based on the HTTP method
+            # request_kwargs = {
+            #     'headers': headers,
+            #     'json': json_data if json_data is not None else None,
+            #     'data': None if json_data is not None else data
+            # }
+            #
+            # if request.method == 'GET':
+            #     response = requests.get(url, headers=headers, params=request.GET)
+            # elif request.method == 'POST':
+            #     response = requests.post(url, **request_kwargs)
+            # elif request.method == 'PUT':
+            #     response = requests.put(url, **request_kwargs)
+            # elif request.method == 'DELETE':
+            #     response = requests.delete(url, **request_kwargs)
+            # elif request.method == 'PATCH':
+            #     response = requests.patch(url, **request_kwargs)
+            # else:
+            #     return JsonResponse({'error': 'Unsupported HTTP method.'},
+            #                         status=status.HTTP_405_METHOD_NOT_ALLOWED)
+            #
+            # # Return the response from the proxied service
+            # return HttpResponse(
+            #     response.content,
+            #     status=response.status_code,
+            #     content_type=response.headers.get('Content-Type', 'application/json')
+            # )
 
         except Exception as e:
-            logging.error(f"Unhandled exception occurred: {str(e)}", exc_info=True)
+            LOG.error("GK FATAL corr=%s error=%s", corr_id if 'corr_id' in locals() else "-", str(e), exc_info=True)
             return JsonResponse(
                 {'error': "An internal server error occurred. Please try again later."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
