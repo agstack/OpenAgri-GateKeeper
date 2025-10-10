@@ -64,20 +64,42 @@ That’s it! No complex setup. No extra steps. Just make sure your service can s
 
 ## Further Documentation
 
-### Configure Environement Variables
+### Configure Environment Variables
 
-Copy the `.env.sample` file into a new file called `.env`. Then change its content accordingly. Here is a list of the most important configuration variables and their use:
+Copy the `.env.sample` file into a new file called `.env`.  
+Then change its content accordingly. Below is the full list of configuration variables and their purposes.
 
-* DB_<USER|PASS|HOST|PORT>= used to set the database configuration for user, password, the ip address hosting the database, and the port used.
-* DATABASE_URL= this is an alternative configuration that can be used instead of the previous one, by representing all the database configs as a single url.
-* JWT_SECRET= The secret used to encript/decript the authentication tokens.
-* APP_<HOST|PORT>= the web service host (i.e., 0.0.0.0) and port (8001 by default).
-* SUPERUSER_<USERNAME|EMAIL|PASSWORD>= Used to create admin user on initial data setup of the system.
-* FARM_CALENDAR_API=API endpoit for the farmcalendar. \*
-* FARM_CALENDAR_POST_AUTH=Farmcalendar post  authentication url. \*
+| Variable | Description | Example / Default |
+|-----------|--------------|------------------|
+| `DB_USER` | Database username. | `root` |
+| `DB_PASS` | Database password. | `mypassword` |
+| `DB_HOST` | Database host address. | `localhost` |
+| `DB_PORT` | Database port number. | `3306` |
+| `DB_NAME` | Database name. | `gatekeeper_db` |
+| `DATABASE_URL` | Alternative database connection string (used instead of separate DB variables). | `mysql://user:password@host:port/dbname` |
+| `DJANGO_SECRET_KEY` | Django’s secret key used for cryptographic signing. **Must be set in production.** | `your-secret-key` |
+| `DJANGO_DEBUG` | Enables or disables Django debug mode. | `True` or `False` (default: `False`) |
+| `DJANGO_PORT` | Port Django runs on locally. | `8001` |
+| `EXTRA_ALLOWED_HOSTS` | Comma-separated list of additional allowed hosts. | `example.com,api.example.com` |
+| `JWT_SIGNING_KEY` | Key used for signing JWT tokens for authentication. | `your-jwt-signing-key` |
+| `JWT_ALG` | Algorithm used for JWT signing. | `HS256` |
+| `JWT_ACCESS_TOKEN_MINUTES` | Access token expiration time (in minutes). | `60` |
+| `JWT_REFRESH_TOKEN_DAYS` | Refresh token expiration time (in days). | `30` |
+| `FARM_CALENDAR_API` | Base API URL for the Farm Calendar service. | `http://127.0.0.1:8002/api/` |
+| `FARM_CALENDAR_POST_AUTH` | Post-authentication endpoint for the Farm Calendar service. | `http://127.0.0.1:8002/post_auth/` |
+| `IRM_API` | Base API URL for the Irrigation Management service. | `http://127.0.0.1:5173/api/` |
+| `IRM_POST_AUTH` | Post-authentication endpoint for the Irrigation Management service. | `http://127.0.0.1:5173/post_auth/` |
+| `INTERNAL_GK_URL` | Internal Gatekeeper URL used by internal services. | `http://gatekeeper:8001/` |
+| `GATEKEEPER_URL` | External/public URL for the Gatekeeper service. | `https://example.com/gatekeeper/` |
+| `FARM_CALENDAR` | Optional reference or identifier for the Farm Calendar service. | `FarmCalendar` |
+| `IRM` | Optional reference or identifier for the Irrigation Management service. | `IrrigationManagement` |
+| `SUPERUSER_USERNAME` | Used to create the admin username during initial setup. | `admin` |
+| `SUPERUSER_EMAIL` | Email address of the admin user during initial setup. | `admin@example.com` |
+| `SUPERUSER_PASSWORD` | Password for the admin user during initial setup. | `admin123` |
 
-
-\* In the future this information will be provided by each service uppon registration, instead of being set in the gatekeeper config.
+> **Note:**  
+> - Variables marked with `*` in older versions (like `FARM_CALENDAR_API` and `FARM_CALENDAR_POST_AUTH`) are still manually configured but may later be automatically provided by each registered service.  
+> - Always keep `DJANGO_SECRET_KEY` and `JWT_SIGNING_KEY` private and never commit them to source control.
 
 ### Running
 To start up the container with the OpenAgri Gatekeeper service, you can run the command:
