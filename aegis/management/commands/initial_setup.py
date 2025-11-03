@@ -78,9 +78,9 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('Checking for superuser...'))
         user = get_user_model()
 
-        superuser_username = os.getenv('SUPERUSER_USERNAME', 'pranav')
-        superuser_email = os.getenv('SUPERUSER_EMAIL', 'p.bapat@maastrichtuniversity.nl')
-        superuser_password = os.getenv('SUPERUSER_PASSWORD', '/i4KNmz/?_x@(Nb')
+        superuser_username = os.getenv('SUPERUSER_USERNAME')
+        superuser_email = os.getenv('SUPERUSER_EMAIL')
+        superuser_password = os.getenv('SUPERUSER_PASSWORD')
 
         if not user.objects.filter(username=superuser_username).exists():
             self.stdout.write(self.style.WARNING('Superuser does not exist. Creating one...'))
