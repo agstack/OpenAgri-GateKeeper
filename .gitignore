@@ -31,3 +31,5 @@ media/
 !static/**/*.*
 
 generate_folder_structure.py
+
+testing/
