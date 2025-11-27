@@ -2,16 +2,14 @@
 
 import logging
 import re
-import requests
 import uuid
 import requests
 
-from typing import Optional
+from typing import Optional, cast
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, DatabaseError
-from django.http import JsonResponse, HttpResponse, HttpResponseRedirect, StreamingHttpResponse
-from django.urls import reverse
+from django.http import JsonResponse, StreamingHttpResponse
 from django.utils import timezone
 
 from rest_framework import status
@@ -295,15 +293,27 @@ class NewReverseProxyAPIView(APIView):
     def dispatch(self, request, *args, **kwargs):
         # Check if the path ends with a slash; if not, redirect to the normalized path
         path = kwargs.get('path', '')
-        if not path.endswith('/'):
-            # Normalize the URL by adding a trailing slash
-            # new_path = f"{path}/"
+        LOG.debug("[GK][dispatch] method=%s raw_path=%s", request.method, path)
 
-            kwargs['path'] = f"{path}/"
-            # return HttpResponseRedirect(reverse('new_reverse_proxy', kwargs={'path': new_path}))
-            return super().dispatch(request, *args, **kwargs)
+        # # only normalise for non-OPTIONS
+        # if request.method != "OPTIONS" and not path.endswith("/"):
+        #     kwargs["path"] = f"{path}/"
+        #     LOG.debug("[GK][dispatch] normalized path -> %s", kwargs["path"])
+
+        # normalise for ALL methods, including OPTIONS
+        if path and not path.endswith("/"):
+            kwargs["path"] = f"{path}/"
+            LOG.debug("[GK][dispatch] normalised path -> %s", kwargs["path"])
 
         return super().dispatch(request, *args, **kwargs)
+
+    def check_permissions(self, request):
+        # Let OPTIONS pass so we can proxy it
+        if request.method == 'OPTIONS':
+            LOG.debug("[GK][check_permissions] OPTIONS -> skipping permission checks")
+            return
+
+        return super().check_permissions(request)
 
     @staticmethod
     def _scrub_auth(h: Optional[str]) -> str:
@@ -318,6 +328,8 @@ class NewReverseProxyAPIView(APIView):
         return "***"
 
     def dispatch_request(self, request, path):
+        LOG.debug("[GK][dispatch_request] method=%s path=%s", request.method, path)
+
         try:
             # -------- Correlation + basic request info --------
             corr_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
@@ -325,7 +337,7 @@ class NewReverseProxyAPIView(APIView):
             req_cl = request.META.get("CONTENT_LENGTH")
             client_ip = request.META.get("REMOTE_ADDR") or "-"
 
-            print(f"Incoming path: {path}")
+            LOG.debug("[GK][dispatch_request] incoming path=%s", path)
 
             # Parse the path to determine service and endpoint
             path_parts = path.split('/')
@@ -336,10 +348,11 @@ class NewReverseProxyAPIView(APIView):
                      request.method, path, service_name, client_ip, req_ct, req_cl, corr_id)
 
             if service_name:
-                print(f"Service Name: {service_name}")
-                print(f"Endpoint After Removing Service Name: {endpoint}")
+                LOG.debug("[GK][dispatch_request] svc=%s endpoint=%s", service_name, endpoint)
 
             if not service_name or not endpoint:
+                LOG.warning("[GK][dispatch_request] invalid path format -> 400 " "svc=%s endpoint=%s",
+                            service_name, endpoint)
                 return JsonResponse({'error': 'Invalid path format.'}, status=400)
 
             # Query the database for matching service and endpoint pattern
@@ -359,26 +372,26 @@ class NewReverseProxyAPIView(APIView):
                     pattern = re.sub(r"\\\{[^\}]+\\\}", r"[^/]+", safe_endpoint)
 
                     # Match the incoming endpoint to the regex pattern
-                    if re.fullmatch(pattern, endpoint):
+                    if re.fullmatch(pattern, cast(str, endpoint)):
                         service_entry = service
+                        LOG.debug("[GK][dispatch_request] matched templated endpoint '%s'",
+                                  service.endpoint)
                         break
                 else:
                     # Direct match for endpoints without placeholders
                     if service.endpoint.strip('/') == endpoint.strip('/'):
                         service_entry = service
+                        LOG.debug("[GK][dispatch_request] matched plain endpoint '%s'",
+                                  service.endpoint)
                         break
-
-                # Ensure endpoint is a valid string before matching
-                if endpoint is None or not isinstance(endpoint, str):
-                    print(f"Invalid endpoint in request: {endpoint}")
-                    continue
 
             if not service_entry:
                 LOG.warning("GK ROUTE ✖ no match svc=%s endpoint=%s corr=%s", service_name, endpoint, corr_id)
                 return JsonResponse({'error': 'No service can provide this resource.'}, status=404)
 
             # Check if the method is supported
-            if request.method not in service_entry.methods:
+            # if request.method not in service_entry.methods:
+            if request.method != "OPTIONS" and request.method not in service_entry.methods:
                 LOG.warning("GK ROUTE ✖ method-not-allowed method=%s svc=%s corr=%s",
                             request.method, service_entry.service_name, corr_id)
                 return JsonResponse(
@@ -403,23 +416,11 @@ class NewReverseProxyAPIView(APIView):
             LOG.info("GK ROUTE → upstream=%s svc=%s corr=%s",
                      upstream_url, service_entry.service_name, corr_id)
 
-            # Construct the target service URL
-            # print("service_entry.base_url: ", service_entry.base_url)
-            # url = f"{service_entry.base_url}{resolved_endpoint.lstrip('/')}"
-
-            # query_string = request.META.get('QUERY_STRING', '')
-            #
-            # if query_string:
-            #     url = f"{url}?{query_string}"
-
             # -------- Forward headers (strip hop-by-hop; add X-Forwarded-*; propagate corr id) --------
             hop_by_hop = {
                 "host", "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
                 "te", "trailers", "transfer-encoding", "upgrade"
             }
-
-            # LOG.info("GK IN ↘ method=%s path=%s svc=%s url=%s ip=%s ct=%s cl=%s corr=%s",
-            #          request.method, path, service_entry.service_name, "TBD", client_ip, req_ct, req_cl, corr_id)
 
             forward_headers = {}
             for k, v in request.headers.items():
@@ -469,7 +470,10 @@ class NewReverseProxyAPIView(APIView):
                 request_kwargs["data"] = raw_body
 
             # -------- Call upstream --------
+            LOG.debug("[GK][dispatch_request] calling upstream method=%s url=%s headers=%s",
+                      method, upstream_url, list(forward_headers.keys()))
             resp = requests.request(method, upstream_url, **request_kwargs)
+            LOG.debug("[GK][dispatch_request] upstream responded status=%s", resp.status_code)
 
             resp_ct = resp.headers.get("Content-Type", "")
             resp_cl = resp.headers.get("Content-Length")
@@ -495,49 +499,6 @@ class NewReverseProxyAPIView(APIView):
 
             return django_resp
 
-            # data = None
-            # json_data = None
-            #
-            # try:
-            #     json_data = request.data
-            # except Exception as e:
-            #     # Fallback to raw body if something goes wrong (e.g., invalid JSON)
-            #     try:
-            #         data = request.body
-            #     except Exception as e2:
-            #         logging.error(f"Error parsing request body. JSON error: {e}, fallback error: {e2}")
-            #         return JsonResponse({
-            #             'error': 'Failed to parse request body. Please ensure it is valid JSON or form data.'
-            #         }, status=status.HTTP_400_BAD_REQUEST)
-            #
-            # # Forward the request based on the HTTP method
-            # request_kwargs = {
-            #     'headers': headers,
-            #     'json': json_data if json_data is not None else None,
-            #     'data': None if json_data is not None else data
-            # }
-            #
-            # if request.method == 'GET':
-            #     response = requests.get(url, headers=headers, params=request.GET)
-            # elif request.method == 'POST':
-            #     response = requests.post(url, **request_kwargs)
-            # elif request.method == 'PUT':
-            #     response = requests.put(url, **request_kwargs)
-            # elif request.method == 'DELETE':
-            #     response = requests.delete(url, **request_kwargs)
-            # elif request.method == 'PATCH':
-            #     response = requests.patch(url, **request_kwargs)
-            # else:
-            #     return JsonResponse({'error': 'Unsupported HTTP method.'},
-            #                         status=status.HTTP_405_METHOD_NOT_ALLOWED)
-            #
-            # # Return the response from the proxied service
-            # return HttpResponse(
-            #     response.content,
-            #     status=response.status_code,
-            #     content_type=response.headers.get('Content-Type', 'application/json')
-            # )
-
         except Exception as e:
             LOG.error("GK FATAL corr=%s error=%s", corr_id if 'corr_id' in locals() else "-", str(e), exc_info=True)
             return JsonResponse(
@@ -558,5 +519,13 @@ class NewReverseProxyAPIView(APIView):
         return self.dispatch_request(request, path)
 
     def patch(self, request, path):
+        return self.dispatch_request(request, path)
+
+    def options(self, request, *args, **kwargs):
+        """
+        Forward OPTIONS like other methods instead of letting DRF auto-generate it.
+        """
+        path = kwargs.get("path", "")
+        LOG.debug("[GK][options] forwarding OPTIONS for path=%s", path)
         return self.dispatch_request(request, path)
 

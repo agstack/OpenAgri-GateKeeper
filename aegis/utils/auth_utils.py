@@ -1,4 +1,4 @@
-# utils/auth_utils.py
+# aegis/utils/auth_utils.py
 
 import jwt
 
