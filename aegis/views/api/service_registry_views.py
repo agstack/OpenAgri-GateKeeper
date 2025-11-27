@@ -337,7 +337,7 @@ class NewReverseProxyAPIView(APIView):
             req_cl = request.META.get("CONTENT_LENGTH")
             client_ip = request.META.get("REMOTE_ADDR") or "-"
 
-            print(f"Incoming path: {path}")
+            LOG.debug("[GK][dispatch_request] incoming path=%s", path)
 
             # Parse the path to determine service and endpoint
             path_parts = path.split('/')
@@ -348,11 +348,11 @@ class NewReverseProxyAPIView(APIView):
                      request.method, path, service_name, client_ip, req_ct, req_cl, corr_id)
 
             if service_name:
-                print(f"Service Name: {service_name}")
-                print(f"Endpoint After Removing Service Name: {endpoint}")
+                LOG.debug("[GK][dispatch_request] svc=%s endpoint=%s", service_name, endpoint)
 
             if not service_name or not endpoint:
-                print("[GK][dispatch_request] invalid path format -> 400")
+                LOG.warning("[GK][dispatch_request] invalid path format -> 400 " "svc=%s endpoint=%s",
+                            service_name, endpoint)
                 return JsonResponse({'error': 'Invalid path format.'}, status=400)
 
             # Query the database for matching service and endpoint pattern
@@ -374,13 +374,15 @@ class NewReverseProxyAPIView(APIView):
                     # Match the incoming endpoint to the regex pattern
                     if re.fullmatch(pattern, cast(str, endpoint)):
                         service_entry = service
-                        print(f"[GK][dispatch_request] matched templated endpoint '{service.endpoint}'")
+                        LOG.debug("[GK][dispatch_request] matched templated endpoint '%s'",
+                                  service.endpoint)
                         break
                 else:
                     # Direct match for endpoints without placeholders
                     if service.endpoint.strip('/') == endpoint.strip('/'):
                         service_entry = service
-                        print(f"[GK][dispatch_request] matched plain endpoint '{service.endpoint}'")
+                        LOG.debug("[GK][dispatch_request] matched plain endpoint '%s'",
+                                  service.endpoint)
                         break
 
             if not service_entry:
@@ -468,9 +470,10 @@ class NewReverseProxyAPIView(APIView):
                 request_kwargs["data"] = raw_body
 
             # -------- Call upstream --------
-            print(f"[GK][dispatch_request] calling upstream: method={method}, headers={list(forward_headers.keys())}")
+            LOG.debug("[GK][dispatch_request] calling upstream method=%s url=%s headers=%s",
+                      method, upstream_url, list(forward_headers.keys()))
             resp = requests.request(method, upstream_url, **request_kwargs)
-            print(f"[GK][dispatch_request] upstream responded: status={resp.status_code}")
+            LOG.debug("[GK][dispatch_request] upstream responded status=%s", resp.status_code)
 
             resp_ct = resp.headers.get("Content-Type", "")
             resp_cl = resp.headers.get("Content-Length")
