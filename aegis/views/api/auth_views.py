@@ -1,4 +1,4 @@
-# views/api_views.py
+# aegis/views/api/auth_views.py
 
 import logging
 
