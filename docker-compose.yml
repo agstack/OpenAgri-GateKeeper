@@ -1,9 +1,12 @@
 services:
   web:
-    image: ghcr.io/openagri-eu/openagri-gatekeeper:latest
+    image: ghcr.io/${DOCKER_REGISTRY}/openagri-gatekeeper:${TAG}
     container_name: django_gatekeeper
     restart: no
-    build: .
+    build:
+      context: .
+      args:
+        SOURCE_REPO: ${SOURCE_REPO}
     env_file:
       - .env
     volumes:

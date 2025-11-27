@@ -1,5 +1,9 @@
+ARG SOURCE_REPO=https://github.com/openagri-eu/openagri-gatekeeper
 # Use an official Python runtime as a parent image
 FROM python:3.12
+LABEL org.opencontainers.image.source=${SOURCE_REPO}
+
+
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE 1
