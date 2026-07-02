@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from aegis.models import BlacklistedRefresh, BlacklistedAccess, FarmCalendarResourceCache
 from aegis.serializers import CustomTokenObtainPairSerializer
 from aegis.services.entitlement_service import resolve_service_entitlements_for_user
+from aegis.throttles import check_login_allowed, clear_login_failures, register_login_failure
 
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
@@ -35,6 +36,29 @@ def _is_fc_service_payload(service_payload):
 @method_decorator(never_cache, name='dispatch')
 class LoginAPIView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
+
+    def post(self, request, *args, **kwargs):
+        identifier = (request.data.get("username") or "").strip()
+        allowed, retry_after = check_login_allowed(request, identifier=identifier)
+        if not allowed:
+            response = Response(
+                {
+                    "error": (
+                        "Too many login attempts. "
+                        f"Try again in {retry_after} seconds."
+                    )
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+            response["Retry-After"] = str(retry_after)
+            return response
+
+        response = super().post(request, *args, **kwargs)
+        if response.status_code == status.HTTP_200_OK:
+            clear_login_failures(request, identifier=identifier)
+        elif response.status_code in {status.HTTP_400_BAD_REQUEST, status.HTTP_401_UNAUTHORIZED}:
+            register_login_failure(request, identifier=identifier)
+        return response
 
 
 # @method_decorator(never_cache, name='dispatch')

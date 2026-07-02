@@ -17,6 +17,7 @@ from rest_framework.views import APIView
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
 
 from aegis.forms import UserLoginForm
+from aegis.throttles import check_login_allowed, clear_login_failures, register_login_failure
 
 
 @method_decorator(never_cache, name='dispatch')
@@ -49,6 +50,11 @@ class LoginView(FormView):
             password = form.cleaned_data["password"]
             # service_name = form.cleaned_data["service_name"]
 
+            allowed, retry_after = check_login_allowed(request, identifier=username)
+            if not allowed:
+                form.add_error(None, f"Too many login attempts. Try again in {retry_after} seconds.")
+                return self.render_to_response(self.get_context_data(form=form))
+
             login_url = f"{settings.INTERNAL_GK_URL}api/login/"
 
             try:
@@ -64,6 +70,7 @@ class LoginView(FormView):
                 data = response.json()
                 access_token = data["access"]
                 refresh_token = data["refresh"]
+                clear_login_failures(request, identifier=username)
 
                 # Determine the redirect URL
                 if next_url == "FarmCalendar":
@@ -87,6 +94,8 @@ class LoginView(FormView):
                 return HttpResponseRedirect(redirect_url)
 
             else:
+                if response.status_code in {status.HTTP_400_BAD_REQUEST, status.HTTP_401_UNAUTHORIZED, status.HTTP_429_TOO_MANY_REQUESTS}:
+                    register_login_failure(request, identifier=username)
                 form.add_error(None, "Invalid credentials")
 
         return self.render_to_response(self.get_context_data(form=form))

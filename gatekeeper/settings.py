@@ -24,6 +24,8 @@ JWT_SIGNING_KEY = get_env_var('JWT_SIGNING_KEY')
 JWT_ALG = os.environ.get('JWT_ALG', "HS256")
 JWT_ACCESS_TOKEN_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_MINUTES", "60"))
 JWT_REFRESH_TOKEN_DAYS = int(os.getenv("JWT_REFRESH_TOKEN_DAYS", "30"))
+LOGIN_THROTTLE_ATTEMPTS = int(os.getenv("LOGIN_THROTTLE_ATTEMPTS", "5"))
+LOGIN_THROTTLE_WINDOW_SECONDS = int(os.getenv("LOGIN_THROTTLE_WINDOW_SECONDS", "600"))
 
 # geting from env var from now, but in the future this infos should
 # come with the service registration post request
