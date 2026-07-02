@@ -209,6 +209,57 @@ def _get_fc_entitlement(user):
     return None
 
 
+def _build_scope_action_maps(fc_entitlement) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
+    """
+    Map each farm/parcel scope_id to the actions granted ON THAT specific scope,
+    read from the entitlement's per-grant ``assignments``. This preserves the
+    action<->scope binding that the flattened ``actions``/``scopes`` fields drop.
+    """
+    farm_actions: dict[str, set[str]] = {}
+    parcel_actions: dict[str, set[str]] = {}
+    for assignment in fc_entitlement.get("assignments", []) or []:
+        scope_type = assignment.get("scope_type")
+        scope_id = assignment.get("scope_id")
+        actions = {a for a in (assignment.get("actions") or []) if isinstance(a, str) and a}
+        if not scope_id or not actions:
+            continue
+        if scope_type == "farm":
+            farm_actions.setdefault(str(scope_id), set()).update(actions)
+        elif scope_type == "parcel":
+            parcel_actions.setdefault(str(scope_id), set()).update(actions)
+    return farm_actions, parcel_actions
+
+
+def _scopes_with_action(
+    action: Optional[str],
+    farm_actions: dict[str, set[str]],
+    parcel_actions: dict[str, set[str]],
+) -> tuple[set[str], set[str]]:
+    """Return (farms, parcels) where the given action is granted on that scope."""
+    if not action:
+        return set(), set()
+    farms = {scope_id for scope_id, actions in farm_actions.items() if action in actions}
+    parcels = {scope_id for scope_id, actions in parcel_actions.items() if action in actions}
+    return farms, parcels
+
+
+def _has_fc_service_wide_action(fc_entitlement, action: Optional[str]) -> bool:
+    if not action:
+        return False
+
+    roles = {
+        role
+        for role in (fc_entitlement.get("roles") or [])
+        if isinstance(role, str)
+    }
+    actions = {
+        item
+        for item in (fc_entitlement.get("actions") or [])
+        if isinstance(item, str)
+    }
+    return action in actions and bool(roles.intersection({"admin", "tenant_admin"}))
+
+
 def _parcel_to_farm_map():
     mapping: dict[str, Optional[str]] = {}
     for resource_id, farm_id in (
@@ -847,9 +898,13 @@ class NewReverseProxyAPIView(APIView):
                     )
                 if fc_entitlement and not fc_entitlement.get("unrestricted"):
                     required_action = METHOD_ACTION_MAP.get(method)
-                    allowed_actions = set(fc_entitlement.get("actions", []) or [])
-                    allowed_farms = set(fc_entitlement.get("scopes", {}).get("farm", []) or [])
-                    allowed_parcels = set(fc_entitlement.get("scopes", {}).get("parcel", []) or [])
+                    farm_actions, parcel_actions = _build_scope_action_maps(fc_entitlement)
+                    has_service_wide_action = _has_fc_service_wide_action(fc_entitlement, required_action)
+                    allowed_actions = set().union(
+                        *farm_actions.values(), *parcel_actions.values()
+                    ) if (farm_actions or parcel_actions) else set()
+                    if has_service_wide_action and required_action:
+                        allowed_actions.add(required_action)
 
                     if required_action and required_action not in allowed_actions:
                         LOG.warning(
@@ -878,22 +933,28 @@ class NewReverseProxyAPIView(APIView):
                         parcel_to_farm = _parcel_to_farm_map()
                         farm_tenants, parcel_tenants = _resource_tenant_maps()
                         tenant_id = str(request.user.tenant_id) if getattr(request.user, "tenant_id", None) else None
-                        if not _targets_within_scope(
+                        # Bind the scope check to the required action: only scopes
+                        # that grant THIS action count as allowed for this write.
+                        action_farms, action_parcels = _scopes_with_action(
+                            required_action, farm_actions, parcel_actions
+                        )
+                        if not has_service_wide_action and not _targets_within_scope(
                             target_farms,
                             target_parcels,
-                            allowed_farms,
-                            allowed_parcels,
+                            action_farms,
+                            action_parcels,
                             parcel_to_farm,
                             tenant_id,
                             farm_tenants,
                             parcel_tenants,
                         ):
                             LOG.warning(
-                                "GK PROXY DENY method=%s svc=%s path=%s user=%s reason=scope target_farms=%s target_parcels=%s corr=%s",
+                                "GK PROXY DENY method=%s svc=%s path=%s user=%s reason=scope_action required=%s target_farms=%s target_parcels=%s corr=%s",
                                 method,
                                 service_entry.service_name,
                                 path,
                                 getattr(request.user, "username", "-"),
+                                required_action,
                                 sorted(target_farms),
                                 sorted(target_parcels),
                                 corr_id,
@@ -957,8 +1018,11 @@ class NewReverseProxyAPIView(APIView):
             ):
                 fc_entitlement = _get_fc_entitlement(request.user)
                 if fc_entitlement and not fc_entitlement.get("unrestricted"):
-                    allowed_farms = set(fc_entitlement.get("scopes", {}).get("farm", []) or [])
-                    allowed_parcels = set(fc_entitlement.get("scopes", {}).get("parcel", []) or [])
+                    farm_actions, parcel_actions = _build_scope_action_maps(fc_entitlement)
+                    # Only surface scopes where the user can actually 'view'.
+                    allowed_farms, allowed_parcels = _scopes_with_action(
+                        "view", farm_actions, parcel_actions
+                    )
                     tenant_id = str(request.user.tenant_id) if getattr(request.user, "tenant_id", None) else None
                     response_data = resp.json()
                     filtered_payload, changed = _filter_fc_payload(response_data, allowed_farms, allowed_parcels, tenant_id)

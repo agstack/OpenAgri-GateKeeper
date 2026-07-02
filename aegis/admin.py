@@ -2,6 +2,7 @@
 
 from django import forms
 from django.contrib import admin, messages
+from django.contrib.admin.widgets import FilteredSelectMultiple
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.admin.forms import AdminAuthenticationForm
 from django.contrib.auth.models import Group
@@ -17,6 +18,7 @@ from .models import (Tenant, DefaultAuthUserExtend, ServiceMaster, PermissionMas
                      RegisteredService, BlacklistedAccess, BlacklistedRefresh, RequestLog, GroupServiceAccess,
                      ServiceScopeAssignment, FarmCalendarResourceCache, ServiceRole)
 from .services.fc_catalog_sync import ensure_farmcalendar_catalog_fresh
+from .services.entitlement_service import fc_service_queryset
 
 
 class HiddenGroupAdmin(admin.ModelAdmin):
@@ -57,38 +59,53 @@ class TenantCodeListFilter(admin.RelatedFieldListFilter):
 
 
 class ServiceScopeAssignmentAdminForm(forms.ModelForm):
-    SUBJECT_TYPE_CHOICES = (
-        ("user", "Individual user"),
+    PERMISSION_ACTION_CHOICES = (
+        ("view", "view"),
+        ("add", "add"),
+        ("edit", "edit"),
+        ("delete", "delete"),
     )
 
     role_ref = forms.ModelChoiceField(
         queryset=ServiceRole.objects.filter(status=1).select_related("service").order_by("service__service_code", "role_name"),
         required=False,
-        label="Role",
-        help_text="Choose the database-backed role. Actions are derived automatically from that role.",
+        label="Role (preset)",
+        help_text=(
+            "RBAC path: pick a predefined Service Role. Its permissions are used. "
+            "Leave blank if you want to assign permissions directly below."
+        ),
     )
-    subject_type = forms.ChoiceField(
-        choices=SUBJECT_TYPE_CHOICES,
-        initial="user",
-        help_text="Assignments are user-based. Select the individual user who should receive this role.",
+    permissions_direct = forms.MultipleChoiceField(
+        choices=PERMISSION_ACTION_CHOICES,
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        label="Permissions (direct)",
+        help_text=(
+            "OBAC path: tick the actions to grant directly. "
+            "Only used when Role is left blank."
+        ),
     )
     subject_user = forms.ModelChoiceField(
-        queryset=DefaultAuthUserExtend.objects.filter(is_tenant_admin=False).order_by("email"),
+        queryset=DefaultAuthUserExtend.objects.filter(
+            is_tenant_admin=False, is_superuser=False
+        ).order_by("email"),
         required=True,
         label="Individual user",
-        help_text="Select the user who should receive this role in the current tenant.",
+        help_text="Select the user who should receive this grant in the selected tenant.",
     )
-    scope_farm = forms.ModelChoiceField(
+    scope_farms = forms.ModelMultipleChoiceField(
         queryset=FarmCalendarResourceCache.objects.filter(resource_type="farm", status=1).order_by("name", "resource_id"),
         required=False,
-        label="Farm",
-        help_text="Select the farm to which this access applies.",
+        label="Farms",
+        widget=FilteredSelectMultiple("Farms", is_stacked=False),
+        help_text="Pick one or more farms. One grant row will be created per farm.",
     )
-    scope_parcel = forms.ModelChoiceField(
+    scope_parcels = forms.ModelMultipleChoiceField(
         queryset=FarmCalendarResourceCache.objects.filter(resource_type="parcel", status=1).order_by("name", "resource_id"),
         required=False,
-        label="Parcel",
-        help_text="Select the parcel to which this access applies.",
+        label="Parcels",
+        widget=FilteredSelectMultiple("Parcels", is_stacked=False),
+        help_text="Pick one or more parcels. One grant row will be created per parcel.",
     )
 
     class Meta:
@@ -97,6 +114,7 @@ class ServiceScopeAssignmentAdminForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         request = kwargs.pop("request", None)
+        self._request = request
         super().__init__(*args, **kwargs)
         self.fields["user"].widget = forms.HiddenInput()
         self.fields["scope_id"].widget = forms.HiddenInput()
@@ -105,80 +123,138 @@ class ServiceScopeAssignmentAdminForm(forms.ModelForm):
         self.fields["user"].required = False
         self.fields["actions"].required = False
         self.fields["role"].required = False
-        self.fields["scope_type"].help_text = "Choose whether this scope applies to a farm or to a parcel."
+        self.fields["scope_type"].help_text = "Choose 'farm' or 'parcel'. Required for Farm Calendar."
+        self.fields["scope_type"].required = False
         self.fields["scope_id"].required = False
 
+        fc_services = fc_service_queryset(ServiceMaster.objects.filter(status=1))
         if request is not None and not request.user.is_superuser and getattr(request.user, "tenant_id", None):
+            tenant_id = request.user.tenant_id
             self.fields["role_ref"].queryset = ServiceRole.objects.filter(
                 status=1,
-                tenant_id=request.user.tenant_id,
+                tenant_id=tenant_id,
+                service__in=fc_services,
             ).select_related("service", "tenant").order_by("service__service_code", "role_name")
+            self.fields["subject_user"].queryset = DefaultAuthUserExtend.objects.filter(
+                tenant_id=tenant_id,
+                is_tenant_admin=False,
+                is_superuser=False,
+                status=1,
+            ).order_by("email")
+            self.fields["scope_farms"].queryset = FarmCalendarResourceCache.objects.filter(
+                tenant_id=tenant_id, resource_type="farm", status=1,
+            ).order_by("name", "resource_id")
+            self.fields["scope_parcels"].queryset = FarmCalendarResourceCache.objects.filter(
+                tenant_id=tenant_id, resource_type="parcel", status=1,
+            ).order_by("name", "resource_id")
         else:
-            self.fields["role_ref"].queryset = ServiceRole.objects.filter(status=1).select_related(
-                "service", "tenant"
-            ).order_by("tenant__code", "service__service_code", "role_name")
+            self.fields["role_ref"].queryset = ServiceRole.objects.filter(
+                status=1,
+                service__in=fc_services,
+            ).select_related("service", "tenant").order_by("tenant__code", "service__service_code", "role_name")
 
         self.fields["role_ref"].label_from_instance = lambda obj: (
             f"{obj.role_name} - {obj.service.service_code}"
             + (f" [{obj.tenant.code}]" if obj.tenant_id else "")
         )
-        self.fields["scope_farm"].label_from_instance = lambda obj: f"{obj.name or '-'} - {obj.resource_id}"
-        self.fields["scope_parcel"].label_from_instance = lambda obj: f"{obj.name or '-'} - {obj.resource_id}"
+        self.fields["scope_farms"].label_from_instance = lambda obj: f"{obj.name or '-'} - {obj.resource_id}"
+        self.fields["scope_parcels"].label_from_instance = lambda obj: f"{obj.name or '-'} - {obj.resource_id}"
 
         if self.instance and self.instance.pk:
             if self.instance.user_id:
-                self.fields["subject_type"].initial = "user"
                 self.fields["subject_user"].initial = self.instance.user
             if self.instance.role_ref_id:
                 self.fields["role_ref"].initial = self.instance.role_ref
+            elif isinstance(self.instance.actions, list) and self.instance.actions:
+                # Only pre-fill direct permissions for OBAC rows (no role_ref).
+                # RBAC rows also carry actions[] (copied from the role at save
+                # time), but pre-filling both fields would trigger the XOR
+                # validator on Save with no field changes.
+                self.fields["permissions_direct"].initial = self.instance.actions
             if self.instance.scope_type == "farm":
-                self.fields["scope_farm"].initial = FarmCalendarResourceCache.objects.filter(
+                existing = FarmCalendarResourceCache.objects.filter(
                     resource_type="farm",
                     resource_id=self.instance.scope_id,
                 ).first()
+                if existing:
+                    self.fields["scope_farms"].initial = [existing]
             elif self.instance.scope_type == "parcel":
-                self.fields["scope_parcel"].initial = FarmCalendarResourceCache.objects.filter(
+                existing = FarmCalendarResourceCache.objects.filter(
                     resource_type="parcel",
                     resource_id=self.instance.scope_id,
                 ).first()
+                if existing:
+                    self.fields["scope_parcels"].initial = [existing]
 
     def clean(self):
         cleaned_data = super().clean()
-        subject_type = cleaned_data.get("subject_type")
         subject_user = cleaned_data.get("subject_user")
         scope_type = cleaned_data.get("scope_type")
-        scope_farm = cleaned_data.get("scope_farm")
-        scope_parcel = cleaned_data.get("scope_parcel")
+        scope_farms = list(cleaned_data.get("scope_farms") or [])
+        scope_parcels = list(cleaned_data.get("scope_parcels") or [])
         role_ref = cleaned_data.get("role_ref")
+        permissions_direct = list(cleaned_data.get("permissions_direct") or [])
         service = cleaned_data.get("service")
+        tenant = cleaned_data.get("tenant")
 
-        if subject_type != "user":
-            raise forms.ValidationError("Service scope assignments must target an individual user.")
         if not subject_user:
             raise forms.ValidationError("Select an individual user for this assignment.")
+        if tenant and getattr(subject_user, "tenant_id", None) != tenant.id:
+            raise forms.ValidationError(
+                "Selected user does not belong to the selected tenant."
+            )
         cleaned_data["user"] = subject_user
         cleaned_data["group"] = None
 
-        if scope_type == "farm":
-            if not scope_farm:
-                raise forms.ValidationError("Select a farm when scope type is 'farm'.")
-            cleaned_data["scope_id"] = scope_farm.resource_id
-        elif scope_type == "parcel":
-            if not scope_parcel:
-                raise forms.ValidationError("Select a parcel when scope type is 'parcel'.")
-            cleaned_data["scope_id"] = scope_parcel.resource_id
+        # RBAC XOR OBAC — exactly one path must be chosen.
+        if role_ref and permissions_direct:
+            raise forms.ValidationError(
+                "Choose either a Role OR direct Permissions, not both."
+            )
+        if not role_ref and not permissions_direct:
+            raise forms.ValidationError(
+                "Choose a Role OR tick at least one direct Permission."
+            )
+
+        if role_ref:
+            if service and role_ref.service_id != service.id:
+                raise forms.ValidationError(
+                    "Selected role does not belong to the selected service."
+                )
+            cleaned_data["role"] = role_ref.role_code
+            cleaned_data["actions"] = list(
+                role_ref.permissions.filter(status=1).order_by("action").values_list("action", flat=True)
+            )
         else:
-            raise forms.ValidationError("Choose whether this scope applies to a farm or a parcel.")
+            cleaned_data["role"] = ""
+            cleaned_data["actions"] = sorted(set(permissions_direct))
 
-        if not role_ref:
-            raise forms.ValidationError("Select a role for this assignment.")
-        if service and role_ref.service_id != service.id:
-            raise forms.ValidationError("Selected role does not belong to the selected service.")
+        service_for_scope = service or getattr(role_ref, "service", None)
+        is_fc = False
+        if service_for_scope is not None:
+            code = (service_for_scope.service_code or "").strip().lower()
+            name = (service_for_scope.service_name or "").strip().lower()
+            is_fc = code in {"fc", "farmcalendar"} or name in {"farmcalendar", "farm calendar"}
 
-        cleaned_data["role"] = role_ref.role_code
-        cleaned_data["actions"] = list(
-            role_ref.permissions.filter(status=1).order_by("action").values_list("action", flat=True)
-        )
+        if is_fc:
+            if scope_type == "farm":
+                if not scope_farms:
+                    raise forms.ValidationError("Select at least one farm.")
+                cleaned_data["_selected_scopes"] = scope_farms
+                cleaned_data["scope_id"] = scope_farms[0].resource_id
+            elif scope_type == "parcel":
+                if not scope_parcels:
+                    raise forms.ValidationError("Select at least one parcel.")
+                cleaned_data["_selected_scopes"] = scope_parcels
+                cleaned_data["scope_id"] = scope_parcels[0].resource_id
+            else:
+                raise forms.ValidationError(
+                    "Farm Calendar grants require a scope (farm or parcel)."
+                )
+        else:
+            cleaned_data["scope_type"] = None
+            cleaned_data["scope_id"] = None
+            cleaned_data["_selected_scopes"] = []
 
         return cleaned_data
 
@@ -403,6 +479,18 @@ class TenantAdmin(SuperuserOnlyAdminMixin, HideDeletedByDefaultMixin, StatusBadg
     actions = ("mark_active", "mark_inactive", "soft_delete_selected", "restore_selected", "export_as_csv")
     EXPORT_FIELDS = ("code", "slug", "name", "status", "created_at", "updated_at", "deleted_at")
 
+    @admin.action(description="Soft delete selected")
+    def soft_delete_selected(self, request, queryset):
+        updated = 0
+        for obj in queryset.exclude(status=2):
+            obj.soft_delete()
+            updated += 1
+        self.message_user(
+            request,
+            f"{updated} tenant record(s) soft-deleted and identifiers released.",
+            level=messages.WARNING,
+        )
+
     def get_actions(self, request):
         actions = super().get_actions(request)
         actions.pop("delete_selected", None)
@@ -514,10 +602,13 @@ class DefaultAuthUserExtendAdmin(TenantScopedAdminMixin, HideDeletedByDefaultMix
         if "email" in form.base_fields:
             form.base_fields["email"].required = True
             form.base_fields["email"].help_text = "Required. Must be unique."
-        if not request.user.is_superuser and "tenant" in form.base_fields:
-            form.base_fields["tenant"].queryset = Tenant.objects.filter(id=request.user.tenant_id)
-            form.base_fields["tenant"].initial = request.user.tenant_id
-            form.base_fields["tenant"].disabled = True
+        if "tenant" in form.base_fields:
+            if request.user.is_superuser:
+                form.base_fields["tenant"].queryset = Tenant.objects.filter(status=1).order_by("code")
+            else:
+                form.base_fields["tenant"].queryset = Tenant.objects.filter(id=request.user.tenant_id, status=1)
+                form.base_fields["tenant"].initial = request.user.tenant_id
+                form.base_fields["tenant"].disabled = True
         if not request.user.is_superuser and "is_superuser" in form.base_fields:
             form.base_fields["is_superuser"].disabled = True
         if not request.user.is_superuser and "is_staff" in form.base_fields:
@@ -577,6 +668,18 @@ class ServiceMasterAdmin(SuperuserOnlyAdminMixin, HideDeletedByDefaultMixin, Sta
     readonly_fields = ("deleted_at", "created_at", "updated_at")
     actions = ("mark_active", "mark_inactive", "soft_delete_selected", "restore_selected", "export_as_csv")
     EXPORT_FIELDS = ("service_code", "service_name", "service_description", "status", "created_at", "updated_at", "deleted_at")
+
+    @admin.action(description="Soft delete selected")
+    def soft_delete_selected(self, request, queryset):
+        updated = 0
+        for obj in queryset.exclude(status=2):
+            obj.soft_delete()
+            updated += 1
+        self.message_user(
+            request,
+            f"{updated} service record(s) soft-deleted and identifiers released.",
+            level=messages.WARNING,
+        )
 
     # Remove hard delete
     def get_actions(self, request):
@@ -802,11 +905,11 @@ class GroupServiceAccessAdmin(HiddenAdminMixin, TenantScopedAdminMixin, HideDele
 
 
 @admin.register(ServiceRole)
-class ServiceRoleAdmin(SuperuserOnlyAdminMixin, HideDeletedByDefaultMixin, StatusBadgeMixin, SoftDeleteActions, ActivateDeactivateActions, CSVExportMixin, admin.ModelAdmin):
+class ServiceRoleAdmin(TenantScopedAdminMixin, HideDeletedByDefaultMixin, StatusBadgeMixin, SoftDeleteActions, ActivateDeactivateActions, CSVExportMixin, admin.ModelAdmin):
     list_display = ("tenant_display", "role_name", "role_code", "service_code", "permission_list", "status_badge", "updated_at")
     list_filter = ("status", ("tenant", TenantCodeListFilter), "service", "updated_at", "created_at")
     search_fields = ("role_name", "role_code", "tenant__code", "tenant__name", "service__service_code", "service__service_name", "description")
-    autocomplete_fields = ("service",)
+    autocomplete_fields = ()
     filter_horizontal = ("permissions",)
     ordering = ("tenant__code", "service__service_code", "role_name")
     list_per_page = 50
@@ -846,7 +949,14 @@ class ServiceRoleAdmin(SuperuserOnlyAdminMixin, HideDeletedByDefaultMixin, Statu
             form.base_fields["tenant"].initial = request.user.tenant_id
             form.base_fields["tenant"].disabled = True
         if "service" in form.base_fields:
-            form.base_fields["service"].queryset = ServiceMaster.objects.filter(status=1).order_by("service_code")
+            form.base_fields["service"].queryset = fc_service_queryset(
+                ServiceMaster.objects.filter(status=1)
+            ).order_by("service_code")
+        if "permissions" in form.base_fields:
+            form.base_fields["permissions"].queryset = PermissionMaster.objects.filter(
+                status=1,
+                service__in=fc_service_queryset(ServiceMaster.objects.filter(status=1)),
+            ).select_related("service").order_by("service__service_code", "action")
         return form
 
     def get_autocomplete_fields(self, request):
@@ -859,10 +969,20 @@ class ServiceRoleAdmin(SuperuserOnlyAdminMixin, HideDeletedByDefaultMixin, Statu
         if not request.user.is_superuser and db_field.name == "tenant":
             kwargs["queryset"] = Tenant.objects.filter(id=request.user.tenant_id)
         elif db_field.name == "service":
-            kwargs["queryset"] = ServiceMaster.objects.filter(status=1).order_by("service_code")
+            kwargs["queryset"] = fc_service_queryset(
+                ServiceMaster.objects.filter(status=1)
+            ).order_by("service_code")
         elif queryset is not None:
             kwargs["queryset"] = queryset
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        if db_field.name == "permissions":
+            kwargs["queryset"] = PermissionMaster.objects.filter(
+                status=1,
+                service__in=fc_service_queryset(ServiceMaster.objects.filter(status=1)),
+            ).select_related("service").order_by("service__service_code", "action")
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
 
     def save_model(self, request, obj, form, change):
         if not request.user.is_superuser:
@@ -902,7 +1022,7 @@ class ServiceScopeAssignmentAdmin(TenantScopedAdminMixin, HideDeletedByDefaultMi
     list_display = ("tenant_display", "subject_display", "service_code", "role_display", "scope_type", "scope_display", "actions_display", "status_badge", "updated_at")
     list_filter = ("status", ("tenant", TenantCodeListFilter), "service", "scope_type", "role_ref", "updated_at", "created_at")
     search_fields = ("service__service_code", "service__service_name", "user__username", "user__email", "scope_id")
-    autocomplete_fields = ("service",)
+    autocomplete_fields = ()
     ordering = ("service__service_code", "scope_type", "scope_id")
     list_per_page = 50
     date_hierarchy = "created_at"
@@ -920,17 +1040,28 @@ class ServiceScopeAssignmentAdmin(TenantScopedAdminMixin, HideDeletedByDefaultMi
                     "status",
                     "tenant",
                     "service",
-                    "subject_type",
                     "subject_user",
                     "user",
-                    "role_ref",
-                    "role",
-                    "actions",
                     "scope_type",
-                    "scope_farm",
-                    "scope_parcel",
+                    "scope_farms",
+                    "scope_parcels",
                     "scope_id",
                 )
+            },
+        ),
+        (
+            "Permissions",
+            {
+                "description": (
+                    "Choose ONE of the following: either a preset Role "
+                    "(RBAC) or tick permissions directly (OBAC)."
+                ),
+                "fields": (
+                    "role_ref",
+                    "permissions_direct",
+                    "role",
+                    "actions",
+                ),
             },
         ),
         (
@@ -1011,10 +1142,14 @@ class ServiceScopeAssignmentAdmin(TenantScopedAdminMixin, HideDeletedByDefaultMi
         self._disable_related_widget_controls(form, "tenant")
         if request.user.is_superuser:
             if "service" in form.base_fields:
-                form.base_fields["service"].queryset = ServiceMaster.objects.filter(status=1).order_by("service_code")
+                form.base_fields["service"].queryset = fc_service_queryset(
+                    ServiceMaster.objects.filter(status=1)
+                ).order_by("service_code")
             return form
         if "service" in form.base_fields:
-            form.base_fields["service"].queryset = ServiceMaster.objects.filter(status=1).order_by("service_code")
+            form.base_fields["service"].queryset = fc_service_queryset(
+                ServiceMaster.objects.filter(status=1)
+            ).order_by("service_code")
         if "tenant" in form.base_fields:
             form.base_fields["tenant"].queryset = Tenant.objects.filter(id=request.user.tenant_id)
             form.base_fields["tenant"].initial = request.user.tenant_id
@@ -1028,19 +1163,27 @@ class ServiceScopeAssignmentAdmin(TenantScopedAdminMixin, HideDeletedByDefaultMi
             form.base_fields["role_ref"].queryset = ServiceRole.objects.filter(
                 status=1,
                 tenant_id=request.user.tenant_id,
+                service__in=fc_service_queryset(ServiceMaster.objects.filter(status=1)),
             ).select_related("service", "tenant").order_by("service__service_code", "role_name")
-        if "scope_farm" in form.base_fields:
-            form.base_fields["scope_farm"].queryset = FarmCalendarResourceCache.objects.filter(
+        if "scope_farms" in form.base_fields:
+            form.base_fields["scope_farms"].queryset = FarmCalendarResourceCache.objects.filter(
                 tenant_id=request.user.tenant_id,
                 resource_type="farm",
                 status=1,
             ).order_by("name", "resource_id")
-        if "scope_parcel" in form.base_fields:
-            form.base_fields["scope_parcel"].queryset = FarmCalendarResourceCache.objects.filter(
+        if "scope_parcels" in form.base_fields:
+            form.base_fields["scope_parcels"].queryset = FarmCalendarResourceCache.objects.filter(
                 tenant_id=request.user.tenant_id,
                 resource_type="parcel",
                 status=1,
             ).order_by("name", "resource_id")
+        if "subject_user" in form.base_fields:
+            form.base_fields["subject_user"].queryset = DefaultAuthUserExtend.objects.filter(
+                tenant_id=request.user.tenant_id,
+                is_tenant_admin=False,
+                is_superuser=False,
+                status=1,
+            ).order_by("email")
         return form
 
     def get_autocomplete_fields(self, request):
@@ -1050,7 +1193,9 @@ class ServiceScopeAssignmentAdmin(TenantScopedAdminMixin, HideDeletedByDefaultMi
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "service":
-            kwargs["queryset"] = ServiceMaster.objects.filter(status=1).order_by("service_code")
+            kwargs["queryset"] = fc_service_queryset(
+                ServiceMaster.objects.filter(status=1)
+            ).order_by("service_code")
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def save_model(self, request, obj, form, change):
@@ -1058,7 +1203,40 @@ class ServiceScopeAssignmentAdmin(TenantScopedAdminMixin, HideDeletedByDefaultMi
             obj.tenant = request.user.tenant
             if obj.user_id and getattr(obj.user, "tenant_id", None) != request.user.tenant_id:
                 raise forms.ValidationError("You can only assign roles to users in your tenant.")
-        super().save_model(request, obj, form, change)
+
+        if change:
+            super().save_model(request, obj, form, change)
+            return
+
+        selected_scopes = list(form.cleaned_data.get("_selected_scopes") or [])
+        scope_type = form.cleaned_data.get("scope_type")
+        if not selected_scopes:
+            super().save_model(request, obj, form, change)
+            return
+
+        first = selected_scopes[0]
+        obj.scope_type = scope_type
+        obj.scope_id = first.resource_id
+        obj.save()
+
+        for extra in selected_scopes[1:]:
+            ServiceScopeAssignment.objects.create(
+                tenant=obj.tenant,
+                service=obj.service,
+                user=obj.user,
+                role_ref=obj.role_ref,
+                role=obj.role,
+                actions=obj.actions,
+                scope_type=scope_type,
+                scope_id=extra.resource_id,
+                status=obj.status,
+            )
+        if len(selected_scopes) > 1:
+            self.message_user(
+                request,
+                f"Created {len(selected_scopes)} grant rows ({scope_type} × user).",
+                level=messages.SUCCESS,
+            )
 
     def get_actions(self, request):
         actions = super().get_actions(request)
