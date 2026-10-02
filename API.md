@@ -18,6 +18,53 @@ http://localhost:8001/api/
 
 ## Authentication Endpoints
 
+### Temporary Event Registration
+
+**Endpoint**
+
+```text
+POST /api/register/
+```
+
+Creates an active staff user who is the administrator of a new isolated
+`sip-temp-<12 hex characters>` tenant. When temporary farm provisioning is
+enabled, GateKeeper also creates one synthetic farm and one parcel in
+FarmCalendar and stamps both resources with the new tenant in its local catalog.
+
+**Request Body**
+
+```json
+{
+  "username": "event-user",
+  "email": "event-user@example.com",
+  "first_name": "Event",
+  "last_name": "User",
+  "password": "temporary-password",
+  "confirm_password": "temporary-password"
+}
+```
+
+**Success Response**
+
+```json
+{
+  "success": true,
+  "message": "User registered successfully. Please log in.",
+  "user_id": "user-uuid",
+  "tenant_code": "sip-temp-12hexchars",
+  "farm_provisioning": {
+    "success": true,
+    "skipped": false,
+    "farm_id": "farm-uuid",
+    "parcel_id": "parcel-uuid"
+  }
+}
+```
+
+Registration remains successful if FarmCalendar is unavailable. In that case,
+`farm_provisioning.success` is `false`; no FarmCalendar error details are exposed
+to the anonymous caller.
+
 ### 1. Login
 
 **Endpoint**
@@ -214,7 +261,8 @@ Authorization: Bearer <access_token>
     "tenant_code": "sip06",
     "tenant_name": "Precise Olive Irrigation Solution",
     "is_platform_admin": false,
-    "is_tenant_admin": true
+    "is_tenant_admin": true,
+    "is_read_only": false
   },
   "services": [
     {
@@ -245,6 +293,7 @@ Notes:
 
 - platform admins are returned with unrestricted service access
 - tenant admins receive implicit FC entitlement for their tenant
+- read-only users (`is_read_only: true`) receive implicit FC entitlement for their tenant, and every service is reduced to the `view` action with the `read_only` role
 - `assignments` reflects the exact entitlement rows used to derive the flattened `roles`, `actions`, and `scopes`
 
 ### 6. FarmCalendar Scopes
@@ -353,6 +402,10 @@ POST /api/register_service/
 
 Registers a downstream service definition in GK.
 
+Requires an active GateKeeper platform superuser. The submitted `base_url`
+must be present in `GK_ALLOWED_UPSTREAMS`; HTTP and private-network destinations
+also require their explicit environment flags.
+
 ### 9. Service Directory
 
 **Endpoint**
@@ -363,15 +416,20 @@ GET /api/service_directory/
 
 Returns the registered service directory.
 
+Requires an active GateKeeper platform superuser because directory entries
+contain internal upstream routing information.
+
 ### 10. Delete Service
 
 **Endpoint**
 
 ```text
-POST /api/delete_service/
+DELETE /api/delete_service/
 ```
 
 Deletes a registered service definition.
+
+Requires an active GateKeeper platform superuser.
 
 ### 11. Reverse Proxy
 
@@ -382,6 +440,9 @@ Deletes a registered service definition.
 ```
 
 GK proxies authenticated requests to downstream services and applies entitlement checks before forwarding.
+The selected service origin must also remain in `GK_ALLOWED_UPSTREAMS`; legacy
+or manually inserted routes outside the allowlist are rejected before a network
+request is made.
 
 In practice this is used heavily for FarmCalendar:
 
@@ -391,6 +452,18 @@ In practice this is used heavily for FarmCalendar:
 - `PATCH /api/proxy/farmcalendar/api/v1/Farm/<uuid>/?format=json`
 
 The proxy layer is where tenant, action, and scope enforcement is applied for protected service requests.
+
+For read-only users the proxy forwards `GET`, `HEAD` and `OPTIONS` to every service,
+and `POST` only to the routes in `GK_READ_ONLY_POST_ALLOWLIST`. Any other request is
+refused before it reaches the service:
+
+```json
+{
+  "error": "This account is read-only."
+}
+```
+
+with status `403`.
 
 ## Admin Login Behavior
 

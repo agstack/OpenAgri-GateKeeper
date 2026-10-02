@@ -8,6 +8,7 @@ import requests
 
 from typing import Optional, cast
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, DatabaseError
 from django.http import JsonResponse, StreamingHttpResponse
@@ -18,9 +19,10 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from aegis.models import FarmCalendarResourceCache, RegisteredService
+from aegis.permissions import IsPlatformSuperuser
 from aegis.services.fc_catalog_sync import upsert_fc_cache_from_payload
 from aegis.services.entitlement_service import resolve_service_entitlements_for_user
-from aegis.utils.service_utils import match_endpoint
+from aegis.services.upstream_security import UpstreamPolicyError, validate_allowed_upstream
 
 LOG = logging.getLogger(__name__)
 
@@ -35,6 +37,8 @@ METHOD_ACTION_MAP = {
     "PATCH": "edit",
     "DELETE": "delete",
 }
+ALLOWED_PROXY_METHODS = frozenset(METHOD_ACTION_MAP)
+READ_ONLY_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
 def _normalize_service_key(value: Optional[str]) -> str:
@@ -46,11 +50,48 @@ def _is_fc_service_name(value: Optional[str]) -> bool:
     return normalized in FC_SERVICE_IDENTIFIERS or normalized == "farm calendar"
 
 
+def _read_only_request_allowed(method: str, service_entry) -> bool:
+    """Read-only users may use safe methods, and POST only to the routes in
+    GATEKEEPER_READ_ONLY_POST_ALLOWLIST."""
+    method = (method or "").upper()
+    if method in READ_ONLY_SAFE_METHODS:
+        return True
+    if method != "POST":
+        return False
+    route = f"{service_entry.service_name}:{(service_entry.endpoint or '').strip('/')}"
+    allowed_routes = set()
+    for item in getattr(settings, "GATEKEEPER_READ_ONLY_POST_ALLOWLIST", ()):
+        service_name, _, endpoint = item.partition(":")
+        allowed_routes.add(f"{service_name.strip()}:{endpoint.strip().strip('/')}")
+    return route in allowed_routes
+
+
 def _is_json_media_type(content_type: Optional[str]) -> bool:
     if not content_type:
         return False
     media_type = content_type.split(";", 1)[0].strip().lower()
     return media_type == "application/json" or media_type.endswith("+json")
+
+
+def _normalize_registered_endpoint(value: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError("Endpoint must be a string.")
+
+    endpoint = value.strip()
+    if not endpoint or endpoint.startswith(("/", "\\")):
+        raise ValueError("Endpoint must be a relative path without a leading slash.")
+    if len(endpoint) > 255:
+        raise ValueError("Endpoint must not exceed 255 characters.")
+    if any(character in endpoint for character in ("\\", "?", "#")):
+        raise ValueError("Endpoint must not contain backslashes, query strings, or fragments.")
+
+    segments = endpoint.strip("/").split("/")
+    if any(not segment or segment in {".", ".."} for segment in segments):
+        raise ValueError("Endpoint contains an invalid path segment.")
+    if any(ord(character) < 32 or ord(character) == 127 for character in endpoint):
+        raise ValueError("Endpoint must not contain control characters.")
+
+    return endpoint.strip("/") + "/"
 
 
 def _extract_uuidish(value) -> Optional[str]:
@@ -207,6 +248,57 @@ def _get_fc_entitlement(user):
         if _is_fc_service_name(service.get("code")) or _is_fc_service_name(service.get("name")):
             return service
     return None
+
+
+def _build_scope_action_maps(fc_entitlement) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
+    """
+    Map each farm/parcel scope_id to the actions granted ON THAT specific scope,
+    read from the entitlement's per-grant ``assignments``. This preserves the
+    action<->scope binding that the flattened ``actions``/``scopes`` fields drop.
+    """
+    farm_actions: dict[str, set[str]] = {}
+    parcel_actions: dict[str, set[str]] = {}
+    for assignment in fc_entitlement.get("assignments", []) or []:
+        scope_type = assignment.get("scope_type")
+        scope_id = assignment.get("scope_id")
+        actions = {a for a in (assignment.get("actions") or []) if isinstance(a, str) and a}
+        if not scope_id or not actions:
+            continue
+        if scope_type == "farm":
+            farm_actions.setdefault(str(scope_id), set()).update(actions)
+        elif scope_type == "parcel":
+            parcel_actions.setdefault(str(scope_id), set()).update(actions)
+    return farm_actions, parcel_actions
+
+
+def _scopes_with_action(
+    action: Optional[str],
+    farm_actions: dict[str, set[str]],
+    parcel_actions: dict[str, set[str]],
+) -> tuple[set[str], set[str]]:
+    """Return (farms, parcels) where the given action is granted on that scope."""
+    if not action:
+        return set(), set()
+    farms = {scope_id for scope_id, actions in farm_actions.items() if action in actions}
+    parcels = {scope_id for scope_id, actions in parcel_actions.items() if action in actions}
+    return farms, parcels
+
+
+def _has_fc_service_wide_action(fc_entitlement, action: Optional[str]) -> bool:
+    if not action:
+        return False
+
+    roles = {
+        role
+        for role in (fc_entitlement.get("roles") or [])
+        if isinstance(role, str)
+    }
+    actions = {
+        item
+        for item in (fc_entitlement.get("actions") or [])
+        if isinstance(item, str)
+    }
+    return action in actions and bool(roles.intersection({"admin", "tenant_admin"}))
 
 
 def _parcel_to_farm_map():
@@ -382,7 +474,7 @@ def _filter_fc_payload(data, allowed_farms: set[str], allowed_parcels: set[str],
 
 
 class RegisterServiceAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsPlatformSuperuser]
 
     def post(self, request):
         # Validate required fields
@@ -395,22 +487,37 @@ class RegisterServiceAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        base_url = request.data.get("base_url").strip()
-        service_name = request.data.get("service_name").strip()
-        endpoint = request.data.get("endpoint").strip()
+        raw_base_url = request.data.get("base_url")
+        raw_service_name = request.data.get("service_name")
+        raw_endpoint = request.data.get("endpoint")
+        if not all(isinstance(value, str) for value in (raw_base_url, raw_service_name, raw_endpoint)):
+            return JsonResponse(
+                {"error": "Base URL, service name, and endpoint must be strings."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        service_name = raw_service_name.strip()
         methods = request.data.get("methods", ["GET", "POST"])
         params = request.data.get("params", "")
 
-        if not service_name or not endpoint:
+        if not service_name or not raw_endpoint.strip():
             return JsonResponse(
                 {"error": "Service name and endpoint are required."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        if not isinstance(methods, list) or not all(isinstance(m, str) for m in methods):
+        if not isinstance(methods, list) or not methods or not all(isinstance(m, str) for m in methods):
             return JsonResponse(
-                {"error": "Methods should be a list of strings."},
+                {"error": "Methods must be a non-empty list of strings."},
                 status=status.HTTP_400_BAD_REQUEST
+            )
+
+        methods = sorted({method.strip().upper() for method in methods if method.strip()})
+        invalid_methods = sorted(set(methods) - ALLOWED_PROXY_METHODS)
+        if not methods or invalid_methods:
+            return JsonResponse(
+                {"error": f"Unsupported proxy methods: {', '.join(invalid_methods) or 'none provided'}."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         if not isinstance(params, str):
@@ -419,20 +526,20 @@ class RegisterServiceAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Validate base_url
-        if len(base_url) > 100:
+        try:
+            base_url = validate_allowed_upstream(raw_base_url)
+        except UpstreamPolicyError as exc:
             return JsonResponse(
-                {"error": "Base URL must not exceed 100 characters."},
-                status=status.HTTP_400_BAD_REQUEST
+                {"error": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if not re.match(r"^(http|https)://[a-zA-Z0-9]([a-zA-Z0-9._]*[a-zA-Z0-9])?:[0-9]{1,5}/$", base_url):
+        try:
+            endpoint = _normalize_registered_endpoint(raw_endpoint)
+        except ValueError as exc:
             return JsonResponse(
-                {
-                    "error": "Base URL must follow the format 'http://baseurl:port/' or 'https://baseurl:port/'. "
-                             "The base URL name must only contain alphanumeric characters, dots (.), or underscores (_), "
-                             "and must start and end with an alphanumeric character. The port number must be 1-5 digits."},
-                status=status.HTTP_400_BAD_REQUEST
+                {"error": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Validate service_name
@@ -442,22 +549,6 @@ class RegisterServiceAPIView(APIView):
                           "It cannot start or end with an underscore, and must be less than 30 characters long."},
                 status=status.HTTP_400_BAD_REQUEST
             )
-
-        # Validate endpoint
-        if endpoint.startswith("/") or endpoint.startswith("\\"):
-            return JsonResponse(
-                {"error": "Endpoint must not start with a forward or backward slash."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        if len(endpoint) > 100:
-            return JsonResponse(
-                {"error": "Endpoint must not exceed 100 characters."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Ensure consistent formatting (always include trailing slash for endpoint)
-        endpoint = endpoint.rstrip('/') + '/'  # Ensure trailing slash for endpoint
 
         # Construct service_url
         if params:
@@ -478,7 +569,13 @@ class RegisterServiceAPIView(APIView):
             )
 
             for existing_service in existing_services:
-                if match_endpoint(endpoint, existing_service.endpoint):
+                # De-duplicate on the exact endpoint string only. Matching a
+                # literal endpoint against another endpoint's {placeholder} here
+                # would merge two genuinely different routes into one row (e.g.
+                # 'openagri-report/irrigation-report/' clobbering the retrieval
+                # route 'openagri-report/{report_id}/'), silently dropping the
+                # other route from the registry.
+                if endpoint.strip('/') == existing_service.endpoint.strip('/'):
                     # Update the existing service with new data
                     existing_service.base_url = base_url
                     existing_service.service_name = service_name
@@ -534,7 +631,7 @@ class RegisterServiceAPIView(APIView):
 
 
 class ServiceDirectoryAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsPlatformSuperuser]
 
     def get(self, request):
         try:
@@ -578,7 +675,7 @@ class ServiceDirectoryAPIView(APIView):
 
 
 class DeleteServiceAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsPlatformSuperuser]
 
     def delete(self, request):
         base_url = request.query_params.get("base_url")
@@ -646,6 +743,55 @@ class DeleteServiceAPIView(APIView):
             )
 
 
+def _endpoint_matches(stored_endpoint: str, incoming_endpoint: str) -> bool:
+    """
+    True if an incoming request path matches a stored endpoint. A stored
+    endpoint containing ``{placeholders}`` matches any single path segment in
+    that position; a plain endpoint must match exactly (ignoring slashes).
+    """
+    if '{' in stored_endpoint and '}' in stored_endpoint:
+        safe_endpoint = re.escape(stored_endpoint)
+        pattern = re.sub(r"\\\{[^\}]+\\\}", r"[^/]+", safe_endpoint)
+        return re.fullmatch(pattern, incoming_endpoint) is not None
+    return stored_endpoint.strip('/') == incoming_endpoint.strip('/')
+
+
+def select_matching_service(services, incoming_endpoint: str, method: str):
+    """
+    Pick the registered service row that should handle a request.
+
+    Preference order:
+      1. Exact (non-templated) endpoint matches before templated ({id}) matches,
+         so a literal path (e.g. '.../irrigation-report/') is never shadowed by a
+         sibling template (e.g. '.../{report_id}/') that also matches it.
+      2. Within each group, a row whose ``methods`` allow the request method, so
+         overlapping literal/template registrations with different method sets
+         each route correctly (OPTIONS is always allowed through for proxying).
+
+    Returns ``(service_entry, endpoint_matched)``:
+      * ``service_entry`` – the chosen row, or ``None``.
+      * ``endpoint_matched`` – True if some row matched the path even when no row
+        allowed the method, so the caller can distinguish 405 from 404.
+    """
+    literal_matches = []
+    template_matches = []
+    for service in services:
+        stored = service.endpoint
+        if not stored or not _endpoint_matches(stored, incoming_endpoint):
+            continue
+        if '{' in stored and '}' in stored:
+            template_matches.append(service)
+        else:
+            literal_matches.append(service)
+
+    endpoint_matched = bool(literal_matches or template_matches)
+    for group in (literal_matches, template_matches):
+        for service in group:
+            if method == "OPTIONS" or method in (service.methods or []):
+                return service, endpoint_matched
+    return None, endpoint_matched
+
+
 class NewReverseProxyAPIView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = []
@@ -666,14 +812,6 @@ class NewReverseProxyAPIView(APIView):
             LOG.debug("[GK][dispatch] normalised path -> %s", kwargs["path"])
 
         return super().dispatch(request, *args, **kwargs)
-
-    def check_permissions(self, request):
-        # Let OPTIONS pass so we can proxy it
-        if request.method == 'OPTIONS':
-            LOG.debug("[GK][check_permissions] OPTIONS -> skipping permission checks")
-            return
-
-        return super().check_permissions(request)
 
     @staticmethod
     def _scrub_auth(h: Optional[str]) -> str:
@@ -719,45 +857,53 @@ class NewReverseProxyAPIView(APIView):
             # Query the database for matching service and endpoint pattern
             services = RegisteredService.objects.filter(service_name=service_name, status=1)
 
-            service_entry = None
-            # Filter by service name
-            for service in services:
-                # Ensure service.endpoint is valid
-                if not service.endpoint:
-                    continue
-
-                # Check if the stored endpoint has placeholders
-                if '{' in service.endpoint and '}' in service.endpoint:
-                    # Convert placeholders to a regex pattern
-                    safe_endpoint = re.escape(service.endpoint)
-                    pattern = re.sub(r"\\\{[^\}]+\\\}", r"[^/]+", safe_endpoint)
-
-                    # Match the incoming endpoint to the regex pattern
-                    if re.fullmatch(pattern, cast(str, endpoint)):
-                        service_entry = service
-                        LOG.debug("[GK][dispatch_request] matched templated endpoint '%s'",
-                                  service.endpoint)
-                        break
-                else:
-                    # Direct match for endpoints without placeholders
-                    if service.endpoint.strip('/') == endpoint.strip('/'):
-                        service_entry = service
-                        LOG.debug("[GK][dispatch_request] matched plain endpoint '%s'",
-                                  service.endpoint)
-                        break
+            # Prefer an exact endpoint match over a templated one, and pick a row
+            # whose methods allow this request, so overlapping literal/template
+            # registrations (e.g. '.../irrigation-report/' vs '.../{report_id}/')
+            # each route correctly instead of depending on DB row order.
+            service_entry, endpoint_matched = select_matching_service(
+                services, cast(str, endpoint), request.method
+            )
 
             if not service_entry:
+                if endpoint_matched:
+                    # The path matched a registration, but none allowed this method.
+                    LOG.warning("GK ROUTE ✖ method-not-allowed method=%s svc=%s endpoint=%s corr=%s",
+                                request.method, service_name, endpoint, corr_id)
+                    return JsonResponse(
+                        {'error': f"Method {request.method} not allowed for this endpoint."},
+                        status=405
+                    )
                 LOG.warning("GK ROUTE ✖ no match svc=%s endpoint=%s corr=%s", service_name, endpoint, corr_id)
                 return JsonResponse({'error': 'No service can provide this resource.'}, status=404)
 
-            # Check if the method is supported
-            # if request.method not in service_entry.methods:
-            if request.method != "OPTIONS" and request.method not in service_entry.methods:
-                LOG.warning("GK ROUTE ✖ method-not-allowed method=%s svc=%s corr=%s",
-                            request.method, service_entry.service_name, corr_id)
+            LOG.debug("[GK][dispatch_request] matched endpoint '%s'", service_entry.endpoint)
+
+            if getattr(request.user, "is_read_only", False) and not _read_only_request_allowed(
+                request.method, service_entry
+            ):
+                LOG.warning(
+                    "GK PROXY DENY method=%s svc=%s path=%s user=%s reason=read_only corr=%s",
+                    request.method,
+                    service_entry.service_name,
+                    path,
+                    getattr(request.user, "username", "-"),
+                    corr_id,
+                )
+                return JsonResponse({"error": "This account is read-only."}, status=403)
+
+            try:
+                upstream_base_url = validate_allowed_upstream(service_entry.base_url)
+            except UpstreamPolicyError as exc:
+                LOG.error(
+                    "GK ROUTE rejected disallowed upstream svc=%s reason=%s corr=%s",
+                    service_entry.service_name,
+                    exc,
+                    corr_id,
+                )
                 return JsonResponse(
-                    {'error': f"Method {request.method} not allowed for this endpoint."},
-                    status=405
+                    {"error": "The configured service upstream is not permitted."},
+                    status=502,
                 )
 
             # Resolve placeholders if present
@@ -773,24 +919,25 @@ class NewReverseProxyAPIView(APIView):
                 )
 
             # -------- Build upstream URL (query handled via params=request.GET) --------
-            upstream_url = f"{service_entry.base_url}{resolved_endpoint.lstrip('/')}"
+            upstream_url = f"{upstream_base_url}{resolved_endpoint.lstrip('/')}"
             LOG.debug("GK ROUTE → upstream=%s svc=%s corr=%s",
                       upstream_url, service_entry.service_name, corr_id)
 
             # -------- Forward headers (strip hop-by-hop; add X-Forwarded-*; propagate corr id) --------
-            hop_by_hop = {
+            blocked_forward_headers = {
                 "host", "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
-                "te", "trailers", "transfer-encoding", "upgrade", "content-length"
+                "te", "trailers", "transfer-encoding", "upgrade", "content-length",
+                "cookie", "x-forwarded-for", "x-forwarded-host", "x-forwarded-proto",
+                "x-real-ip", "x-request-id",
             }
 
             forward_headers = {}
             for k, v in request.headers.items():
-                if k.lower() not in hop_by_hop:
+                if k.lower() not in blocked_forward_headers:
                     forward_headers[k] = v
 
-            # Normalise forwards
-            existing_xff = forward_headers.get("X-Forwarded-For")
-            forward_headers["X-Forwarded-For"] = f"{existing_xff}, {client_ip}" if existing_xff else (client_ip or "-")
+            # Rebuild forwarding metadata instead of trusting client-supplied values.
+            forward_headers["X-Forwarded-For"] = client_ip or "-"
             forward_headers["X-Forwarded-Proto"] = request.scheme
             forward_headers["X-Request-ID"] = corr_id
 
@@ -847,9 +994,13 @@ class NewReverseProxyAPIView(APIView):
                     )
                 if fc_entitlement and not fc_entitlement.get("unrestricted"):
                     required_action = METHOD_ACTION_MAP.get(method)
-                    allowed_actions = set(fc_entitlement.get("actions", []) or [])
-                    allowed_farms = set(fc_entitlement.get("scopes", {}).get("farm", []) or [])
-                    allowed_parcels = set(fc_entitlement.get("scopes", {}).get("parcel", []) or [])
+                    farm_actions, parcel_actions = _build_scope_action_maps(fc_entitlement)
+                    has_service_wide_action = _has_fc_service_wide_action(fc_entitlement, required_action)
+                    allowed_actions = set().union(
+                        *farm_actions.values(), *parcel_actions.values()
+                    ) if (farm_actions or parcel_actions) else set()
+                    if has_service_wide_action and required_action:
+                        allowed_actions.add(required_action)
 
                     if required_action and required_action not in allowed_actions:
                         LOG.warning(
@@ -878,22 +1029,28 @@ class NewReverseProxyAPIView(APIView):
                         parcel_to_farm = _parcel_to_farm_map()
                         farm_tenants, parcel_tenants = _resource_tenant_maps()
                         tenant_id = str(request.user.tenant_id) if getattr(request.user, "tenant_id", None) else None
-                        if not _targets_within_scope(
+                        # Bind the scope check to the required action: only scopes
+                        # that grant THIS action count as allowed for this write.
+                        action_farms, action_parcels = _scopes_with_action(
+                            required_action, farm_actions, parcel_actions
+                        )
+                        if not has_service_wide_action and not _targets_within_scope(
                             target_farms,
                             target_parcels,
-                            allowed_farms,
-                            allowed_parcels,
+                            action_farms,
+                            action_parcels,
                             parcel_to_farm,
                             tenant_id,
                             farm_tenants,
                             parcel_tenants,
                         ):
                             LOG.warning(
-                                "GK PROXY DENY method=%s svc=%s path=%s user=%s reason=scope target_farms=%s target_parcels=%s corr=%s",
+                                "GK PROXY DENY method=%s svc=%s path=%s user=%s reason=scope_action required=%s target_farms=%s target_parcels=%s corr=%s",
                                 method,
                                 service_entry.service_name,
                                 path,
                                 getattr(request.user, "username", "-"),
+                                required_action,
                                 sorted(target_farms),
                                 sorted(target_parcels),
                                 corr_id,
@@ -957,8 +1114,11 @@ class NewReverseProxyAPIView(APIView):
             ):
                 fc_entitlement = _get_fc_entitlement(request.user)
                 if fc_entitlement and not fc_entitlement.get("unrestricted"):
-                    allowed_farms = set(fc_entitlement.get("scopes", {}).get("farm", []) or [])
-                    allowed_parcels = set(fc_entitlement.get("scopes", {}).get("parcel", []) or [])
+                    farm_actions, parcel_actions = _build_scope_action_maps(fc_entitlement)
+                    # Only surface scopes where the user can actually 'view'.
+                    allowed_farms, allowed_parcels = _scopes_with_action(
+                        "view", farm_actions, parcel_actions
+                    )
                     tenant_id = str(request.user.tenant_id) if getattr(request.user, "tenant_id", None) else None
                     response_data = resp.json()
                     filtered_payload, changed = _filter_fc_payload(response_data, allowed_farms, allowed_parcels, tenant_id)
