@@ -2,7 +2,6 @@
 
 import os
 
-from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
 from django.db import connections, connection
@@ -70,13 +69,10 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING('auth_user table not found. Running migrations...'))
             call_command('migrate')
 
-        # Collect static files only if not already collected
-        static_dir = settings.STATIC_ROOT
-        if not os.path.exists(static_dir) or not os.listdir(static_dir):
-            self.stdout.write(self.style.SUCCESS('Collecting static files...'))
-            call_command('collectstatic', '--noinput')
-        else:
-            self.stdout.write(self.style.SUCCESS('Static files already collected.'))
+        # Refresh collected assets on every startup so a persisted Docker
+        # volume cannot keep stale files after an application update.
+        self.stdout.write(self.style.SUCCESS('Collecting static files...'))
+        call_command('collectstatic', '--noinput')
 
         self.stdout.write(self.style.SUCCESS('Checking for superuser...'))
         user = get_user_model()

@@ -22,7 +22,7 @@
             <div class="auth-content my-auto">
                 <div class="text-center">
                     <h5 class="mb-0">Create Account</h5>
-                    <p class="text-muted mt-2">Get your free account now.</p>
+                    <p class="text-muted mt-2">A new temporary SIP will be created for you automatically.</p>
                 </div>
                 <form class="mt-4 pt-2" method="POST" action="{% url 'register' %}">
                     {% csrf_token %}
@@ -34,7 +34,7 @@
                         <button class="btn btn-primary w-100 waves-effect waves-light" type="submit">Register</button>
                     </div>
                 </form>
-                <div class="mt-4 text-center">
+                <div class="mt-4 text-center d-none">
                     <p>Already have an account?
                         <a href="{% url 'login' %}?next={{ request.GET.next|default:'' }}" class="text-primary">Login</a>
                     </p>

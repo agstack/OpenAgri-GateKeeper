@@ -2,7 +2,7 @@
 
 import logging
 
-# from django import forms
+from django.core.exceptions import ValidationError
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 
@@ -16,11 +16,12 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 
 from datetime import datetime, timezone
 
-# from aegis.forms import UserRegistrationForm
-# from aegis.services.auth_services import register_user
+from aegis.forms import UserRegistrationForm
 from aegis.models import BlacklistedRefresh, BlacklistedAccess, FarmCalendarResourceCache
 from aegis.serializers import CustomTokenObtainPairSerializer
+from aegis.services.auth_services import register_user
 from aegis.services.entitlement_service import resolve_service_entitlements_for_user
+from aegis.throttles import check_login_allowed, clear_login_failures, register_login_failure
 
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
@@ -36,48 +37,80 @@ def _is_fc_service_payload(service_payload):
 class LoginAPIView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
 
+    def post(self, request, *args, **kwargs):
+        identifier = (request.data.get("username") or "").strip()
+        allowed, retry_after = check_login_allowed(request, identifier=identifier)
+        if not allowed:
+            response = Response(
+                {
+                    "error": (
+                        "Too many login attempts. "
+                        f"Try again in {retry_after} seconds."
+                    )
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+            response["Retry-After"] = str(retry_after)
+            return response
 
-# @method_decorator(never_cache, name='dispatch')
-# class RegisterAPIView(APIView):
-#     permission_classes = [permissions.AllowAny]
-#     authentication_classes = []
-#
-#     def post(self, request):
-#         form = UserRegistrationForm(request.data)
-#
-#         if form.is_valid():
-#             try:
-#                 register_user(
-#                     username=form.cleaned_data["username"],
-#                     email=form.cleaned_data["email"],
-#                     # service_name=form.cleaned_data["service_name"],
-#                     password=form.cleaned_data["password"],
-#                     first_name=form.cleaned_data["first_name"],
-#                     last_name=form.cleaned_data["last_name"]
-#                 )
-#                 return Response({
-#                     "success": True,
-#                     "message": "User registered successfully. Please log in."
-#                 }, status=status.HTTP_201_CREATED)
-#
-#             except forms.ValidationError as e:
-#                 return Response({
-#                     "success": False,
-#                     "error": str(e)
-#                 }, status=status.HTTP_400_BAD_REQUEST)
-#             except Exception as e:
-#                 logging.error(f"An unexpected error occurred: {str(e)}", exc_info=True)
-#                 return Response({
-#                     "success": False,
-#                     # "error": f"An unexpected error occurred: {str(e)}"
-#                     "error": "An unexpected error occurred. Please try again later."
-#                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-#
-#         # Return validation errors
-#         return Response({
-#             "success": False,
-#             "errors": form.errors
-#         }, status=status.HTTP_400_BAD_REQUEST)
+        response = super().post(request, *args, **kwargs)
+        if response.status_code == status.HTTP_200_OK:
+            clear_login_failures(request, identifier=identifier)
+        elif response.status_code in {status.HTTP_400_BAD_REQUEST, status.HTTP_401_UNAUTHORIZED}:
+            register_login_failure(request, identifier=identifier)
+        return response
+
+
+@method_decorator(never_cache, name='dispatch')
+class RegisterAPIView(APIView):
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        registration_data = request.data.copy()
+        field_aliases = {
+            "first_name": "firstName",
+            "last_name": "lastName",
+            "password_confirm": "confirm_password",
+        }
+        for gatekeeper_field, dashboard_field in field_aliases.items():
+            if gatekeeper_field not in registration_data and dashboard_field in registration_data:
+                registration_data[gatekeeper_field] = registration_data[dashboard_field]
+
+        if "password_confirm" not in registration_data and "password" in registration_data:
+            registration_data["password_confirm"] = registration_data["password"]
+
+        form = UserRegistrationForm(registration_data)
+        if not form.is_valid():
+            return Response(
+                {"success": False, "errors": form.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            registration = register_user(
+                username=form.cleaned_data["username"],
+                email=form.cleaned_data["email"],
+                password=form.cleaned_data["password"],
+                first_name=form.cleaned_data["first_name"],
+                last_name=form.cleaned_data["last_name"],
+            )
+        except ValidationError as exc:
+            return Response(
+                {"success": False, "error": "; ".join(exc.messages)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(
+            {
+                "success": True,
+                "message": "User registered successfully. Please log in.",
+                "user_id": str(registration["user_id"]),
+                "tenant_code": registration["tenant_code"],
+                "farm_provisioning": registration["farm_provisioning"],
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 @method_decorator(never_cache, name='dispatch')

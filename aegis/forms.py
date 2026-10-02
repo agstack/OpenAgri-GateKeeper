@@ -61,6 +61,15 @@ class UserRegistrationForm(forms.ModelForm):
         help_text="",
     )
 
+    password_confirm = forms.CharField(
+        widget=forms.PasswordInput(attrs={
+            "class": "form-floating form-floating-custom mb-3 passwordinput form-control",
+            "placeholder": "Confirm Password (Required)"
+        }),
+        label="",
+        help_text="",
+    )
+
     # service_name = forms.ChoiceField(
     #     widget=forms.Select(attrs={
     #         "class": "form-floating form-floating-custom mb-3 select form-control",
@@ -72,30 +81,21 @@ class UserRegistrationForm(forms.ModelForm):
 
     class Meta:
         model = DefaultAuthUserExtend
-        fields = ["first_name", "last_name", "username", "email", "password"]
+        fields = ["first_name", "last_name", "username", "email", "password", "password_confirm"]
 
     def clean_email(self):
-        email = self.cleaned_data.get("email")
-        if DefaultAuthUserExtend.objects.filter(email=email).exists():
+        email = (self.cleaned_data.get("email") or "").strip().lower()
+        if DefaultAuthUserExtend.objects.filter(email__iexact=email).exists():
             raise forms.ValidationError("This email is already registered.")
         return email
 
-    def clean_password(self):
-        password = self.cleaned_data.get("password")
-
-        # Enforce minimum length of 6 characters
-        if len(password) < 6:
-            raise forms.ValidationError("Password must be at least 6 characters long.")
-
-        # Uncomment the following validations when needed:
-        # if not any(char.isdigit() for char in password):
-        #     raise forms.ValidationError("Password must contain at least one digit.")
-        # if not any(char.isupper() for char in password):
-        #     raise forms.ValidationError("Password must contain at least one uppercase letter.")
-        # if not any(char in "!@#$%^&*()_+-=[]{}|;:'\",.<>?/`~" for char in password):
-        #     raise forms.ValidationError("Password must contain at least one special character.")
-
-        return password
+    def clean(self):
+        cleaned_data = super().clean()
+        password = cleaned_data.get("password")
+        password_confirm = cleaned_data.get("password_confirm")
+        if password and password_confirm and password != password_confirm:
+            self.add_error("password_confirm", "Passwords do not match.")
+        return cleaned_data
 
 
 class UserLoginForm(forms.Form):

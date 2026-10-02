@@ -18,6 +18,53 @@ http://localhost:8001/api/
 
 ## Authentication Endpoints
 
+### Temporary Event Registration
+
+**Endpoint**
+
+```text
+POST /api/register/
+```
+
+Creates an active staff user who is the administrator of a new isolated
+`sip-temp-<12 hex characters>` tenant. When temporary farm provisioning is
+enabled, GateKeeper also creates one synthetic farm and one parcel in
+FarmCalendar and stamps both resources with the new tenant in its local catalog.
+
+**Request Body**
+
+```json
+{
+  "username": "event-user",
+  "email": "event-user@example.com",
+  "first_name": "Event",
+  "last_name": "User",
+  "password": "temporary-password",
+  "confirm_password": "temporary-password"
+}
+```
+
+**Success Response**
+
+```json
+{
+  "success": true,
+  "message": "User registered successfully. Please log in.",
+  "user_id": "user-uuid",
+  "tenant_code": "sip-temp-12hexchars",
+  "farm_provisioning": {
+    "success": true,
+    "skipped": false,
+    "farm_id": "farm-uuid",
+    "parcel_id": "parcel-uuid"
+  }
+}
+```
+
+Registration remains successful if FarmCalendar is unavailable. In that case,
+`farm_provisioning.success` is `false`; no FarmCalendar error details are exposed
+to the anonymous caller.
+
 ### 1. Login
 
 **Endpoint**
@@ -353,6 +400,10 @@ POST /api/register_service/
 
 Registers a downstream service definition in GK.
 
+Requires an active GateKeeper platform superuser. The submitted `base_url`
+must be present in `GK_ALLOWED_UPSTREAMS`; HTTP and private-network destinations
+also require their explicit environment flags.
+
 ### 9. Service Directory
 
 **Endpoint**
@@ -363,15 +414,20 @@ GET /api/service_directory/
 
 Returns the registered service directory.
 
+Requires an active GateKeeper platform superuser because directory entries
+contain internal upstream routing information.
+
 ### 10. Delete Service
 
 **Endpoint**
 
 ```text
-POST /api/delete_service/
+DELETE /api/delete_service/
 ```
 
 Deletes a registered service definition.
+
+Requires an active GateKeeper platform superuser.
 
 ### 11. Reverse Proxy
 
@@ -382,6 +438,9 @@ Deletes a registered service definition.
 ```
 
 GK proxies authenticated requests to downstream services and applies entitlement checks before forwarding.
+The selected service origin must also remain in `GK_ALLOWED_UPSTREAMS`; legacy
+or manually inserted routes outside the allowlist are rejected before a network
+request is made.
 
 In practice this is used heavily for FarmCalendar:
 

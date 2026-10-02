@@ -3,9 +3,7 @@ from collections import defaultdict
 from django.db.models import Q
 
 from aegis.models import (
-    CustomPermissions,
     FarmCalendarResourceCache,
-    GroupCustomPermissions,
     PermissionMaster,
     ServiceMaster,
     ServiceScopeAssignment,
@@ -24,6 +22,18 @@ def _is_fc_service(service_code, service_name):
         _normalize_service_key(service_code) in FC_SERVICE_IDENTIFIERS
         or _normalize_service_key(service_name) in FC_SERVICE_IDENTIFIERS
         or _normalize_service_key(service_name) == "farm calendar"
+    )
+
+
+def fc_service_queryset(base_qs=None):
+    """Filter a ServiceMaster queryset (default: all rows) down to FC."""
+    if base_qs is None:
+        base_qs = ServiceMaster.objects.all()
+    return base_qs.filter(
+        Q(service_code__iexact="FC")
+        | Q(service_code__iexact="farmcalendar")
+        | Q(service_name__iexact="Farm Calendar")
+        | Q(service_name__iexact="FarmCalendar")
     )
 
 
@@ -105,18 +115,30 @@ def _apply_superuser_entitlements():
     return services
 
 
-def _apply_tenant_admin_fc_entitlements(user, services):
+def _apply_tenant_user_entitlements(user, services):
+    """Policy:
+    - Every user that belongs to a tenant gets all non-FC services tenant-wide
+      (unrestricted, all actions).
+    - Tenant admins additionally get FC enumerated to every farm/parcel in
+      their tenant. Non-admin users get FC only via explicit Role Grants.
+    """
     tenant_id = getattr(user, "tenant_id", None)
-    if not getattr(user, "is_tenant_admin", False) or not tenant_id:
+    if not tenant_id:
+        return services
+    if getattr(user, "is_superuser", False):
         return services
 
-    active_fc_services = ServiceMaster.objects.filter(status=1).values_list("service_code", "service_name")
-    for service_code, service_name in active_fc_services:
-        if not _is_fc_service(service_code, service_name):
+    is_tenant_admin = bool(getattr(user, "is_tenant_admin", False))
+
+    active_services = ServiceMaster.objects.filter(status=1).values_list("service_code", "service_name")
+    for service_code, service_name in active_services:
+        is_fc = _is_fc_service(service_code, service_name)
+        if is_fc and not is_tenant_admin:
             continue
 
         entry = _ensure_service_entry(services, service_code, service_name)
-        entry["roles"].add("tenant_admin")
+        if is_tenant_admin:
+            entry["roles"].add("tenant_admin")
 
         permission_actions = PermissionMaster.objects.filter(
             status=1,
@@ -127,20 +149,23 @@ def _apply_tenant_admin_fc_entitlements(user, services):
             if action:
                 entry["actions"].add(action)
 
-        fc_rows = FarmCalendarResourceCache.objects.filter(
-            status=1,
-            tenant_id=tenant_id,
-            resource_type__in=("farm", "parcel"),
-        ).values_list("resource_type", "resource_id")
-        for scope_type, scope_id in fc_rows:
-            _append_assignment(
-                entry,
-                role="tenant_admin",
-                actions=sorted(entry["actions"]),
-                scope_type=scope_type,
-                scope_id=scope_id,
-                source="tenant_admin",
-            )
+        if is_fc:
+            fc_rows = FarmCalendarResourceCache.objects.filter(
+                status=1,
+                tenant_id=tenant_id,
+                resource_type__in=("farm", "parcel"),
+            ).values_list("resource_type", "resource_id")
+            for scope_type, scope_id in fc_rows:
+                _append_assignment(
+                    entry,
+                    role="tenant_admin",
+                    actions=sorted(entry["actions"]),
+                    scope_type=scope_type,
+                    scope_id=scope_id,
+                    source="tenant_admin",
+                )
+        else:
+            entry["unrestricted"] = True
 
     return services
 
@@ -148,8 +173,8 @@ def _apply_tenant_admin_fc_entitlements(user, services):
 def resolve_service_entitlements_for_user(user):
     """
     Build normalized per-service entitlements for a user by combining:
-    1) Legacy action grants (CustomPermissions + GroupCustomPermissions)
-    2) Scoped assignments (ServiceScopeAssignment)
+    1) Tenant-wide auto-grants (non-FC) + tenant-admin FC scope
+    2) Scoped assignments (ServiceScopeAssignment / Role Grants)
 
     Output keeps both:
     - flattened compatibility fields (`roles`, `actions`, `scopes`)
@@ -160,47 +185,9 @@ def resolve_service_entitlements_for_user(user):
     else:
         services = {}
 
-    services = _apply_tenant_admin_fc_entitlements(user, services)
+    services = _apply_tenant_user_entitlements(user, services)
 
     group_ids = list(user.groups.values_list("id", flat=True))
-
-    # Legacy action grants via groups.
-    group_rows = (
-        GroupCustomPermissions.objects
-        .filter(
-            group_id__in=group_ids, status=1,
-            permission_names__status=1,
-            permission_names__service__status=1,
-        )
-        .values_list(
-            "permission_names__service__service_code",
-            "permission_names__service__service_name",
-            "permission_names__action",
-        )
-    )
-    for service_code, service_name, action in group_rows:
-        if service_code and action:
-            entry = _ensure_service_entry(services, service_code, service_name)
-            entry["actions"].add(action)
-
-    # Legacy action grants via direct user permissions.
-    user_rows = (
-        CustomPermissions.objects
-        .filter(
-            user=user, status=1,
-            permission_name__status=1,
-            permission_name__service__status=1,
-        )
-        .values_list(
-            "permission_name__service__service_code",
-            "permission_name__service__service_name",
-            "permission_name__action",
-        )
-    )
-    for service_code, service_name, action in user_rows:
-        if service_code and action:
-            entry = _ensure_service_entry(services, service_code, service_name)
-            entry["actions"].add(action)
 
     # Scoped assignments via group or user.
     scope_assignments = (

@@ -14,6 +14,13 @@ from .env_helpers import get_env_var
 
 load_dotenv()
 
+
+def _env_flag(name, default=False):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -24,6 +31,23 @@ JWT_SIGNING_KEY = get_env_var('JWT_SIGNING_KEY')
 JWT_ALG = os.environ.get('JWT_ALG', "HS256")
 JWT_ACCESS_TOKEN_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_MINUTES", "60"))
 JWT_REFRESH_TOKEN_DAYS = int(os.getenv("JWT_REFRESH_TOKEN_DAYS", "30"))
+LOGIN_THROTTLE_ATTEMPTS = int(os.getenv("LOGIN_THROTTLE_ATTEMPTS", "5"))
+LOGIN_THROTTLE_WINDOW_SECONDS = int(os.getenv("LOGIN_THROTTLE_WINDOW_SECONDS", "600"))
+GATEKEEPER_ALLOWED_UPSTREAMS = tuple(
+    value.strip()
+    for value in os.getenv("GK_ALLOWED_UPSTREAMS", "").split(",")
+    if value.strip()
+)
+GATEKEEPER_ALLOW_PRIVATE_UPSTREAMS = _env_flag("GK_ALLOW_PRIVATE_UPSTREAMS")
+GATEKEEPER_ALLOW_HTTP_UPSTREAMS = _env_flag("GK_ALLOW_HTTP_UPSTREAMS")
+GATEKEEPER_PROVISION_SAMPLE_FARM_ON_REGISTRATION = _env_flag(
+    "GK_PROVISION_SAMPLE_FARM_ON_REGISTRATION",
+    default=True,
+)
+GATEKEEPER_FARM_PROVISION_TIMEOUT_SECONDS = max(
+    1,
+    int(os.getenv("GK_FARM_PROVISION_TIMEOUT_SECONDS", "10")),
+)
 
 # geting from env var from now, but in the future this infos should
 # come with the service registration post request
@@ -43,7 +67,7 @@ AVAILABLE_SERVICES = {
 INTERNAL_GK_URL = os.getenv('INTERNAL_GK_URL', 'http://gatekeeper:8001/')
 
 # Default DEBUG to False
-DEBUG = os.getenv('DJANGO_DEBUG', 'False') == 'True'
+DEBUG = _env_flag('DJANGO_DEBUG')
 # DEBUG = 'DJANGO_DEBUG' in os.environ and os.getenv('DJANGO_DEBUG', '').strip().lower() in ('true', '1', 't')
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', '[::1]']
@@ -213,8 +237,8 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
             ],
-            # Controls whether the template system should be in debug mode.
-            "debug": True,
+            # Keep template debugging aligned with Django's global debug mode.
+            "debug": DEBUG,
         },
     },
 ]
@@ -275,9 +299,6 @@ USE_I18N = True
 
 USE_TZ = True
 
-# WhiteNoise requires STATICFILES_STORAGE
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
-
 # STATIC_URL is the URL to use when referring to static files (like CSS, JavaScript, and images) in templates.
 STATIC_URL = "/assets/"
 
@@ -286,7 +307,24 @@ STATIC_URL = "/assets/"
 STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")]
 
 # STATIC_ROOT is the directory where these static files will be collected when you run collectstatic.
-STATIC_ROOT = os.getenv("DJANGO_STATIC_ROOT", os.path.join(BASE_DIR, "assets"))
+STATIC_ROOT = Path(os.getenv("DJANGO_STATIC_ROOT") or BASE_DIR / "assets")
+
+# Keep uploaded media on an explicit URL prefix. In particular, never allow
+# Django's development media helper to create a catch-all route at "/".
+MEDIA_URL = "/media/"
+MEDIA_ROOT = Path(os.getenv("DJANGO_MEDIA_ROOT") or BASE_DIR / "media")
+
+# STATICFILES_STORAGE was removed in modern Django versions. Configure the
+# WhiteNoise backend through STORAGES so static files are compressed and
+# served by the application when DEBUG is disabled.
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
+    },
+}
 
 AUTH_EXEMPT_PATHS = ["/assets/"]
 

@@ -129,6 +129,21 @@ JWT:
 - `JWT_ACCESS_TOKEN_MINUTES`
 - `JWT_REFRESH_TOKEN_DAYS`
 
+Proxy upstream policy:
+
+- `GK_ALLOWED_UPSTREAMS` — comma-separated exact service origins, including ports and trailing slashes
+- `GK_ALLOW_PRIVATE_UPSTREAMS` — explicitly permit allowlisted private/Docker-network addresses
+- `GK_ALLOW_HTTP_UPSTREAMS` — explicitly permit allowlisted plain-HTTP origins
+
+Temporary registration provisioning:
+
+- `GK_PROVISION_SAMPLE_FARM_ON_REGISTRATION` — create one sample farm and parcel for each new temporary tenant
+- `GK_FARM_PROVISION_TIMEOUT_SECONDS` — connect/read timeout for each FarmCalendar request
+
+The sample data is selected from 100 synthetic profiles in
+`aegis/data/temporary_farm_profiles.json`. Creation is best-effort: registration
+is retained if FarmCalendar is temporarily unavailable.
+
 FarmCalendar / proxy integration:
 
 - `FARM_CALENDAR_API`
