@@ -73,23 +73,21 @@ def _normalize_fc_type(value):
 
 
 def _infer_resource_type(item):
+    # Trust only the declared type: other FC records (activities, machines,
+    # observations, ...) also carry farm/parcel fields and are not farms.
     item_type = _normalize_fc_type(item.get("@type") or item.get("resource_type") or "")
     if item_type in {"farm"}:
         return "farm"
     if item_type in {"parcel", "farmparcel"}:
         return "parcel"
-
-    if item.get("farm") or item.get("farm_id"):
-        return "parcel"
-    if item.get("hasAgriParcel") or item.get("hasagriParcel"):
-        return "farm"
     return None
 
 
 def upsert_fc_cache_from_payload(payload, *, tenant=None):
     """
     Upsert FC cache rows from a response payload without mutating FC itself.
-    Used by GK to stamp tenant ownership after successful proxied writes.
+    Used by GK to stamp tenant ownership of newly created farms/parcels after
+    successful proxied writes.
     """
     items = _extract_graph_items(payload)
     if isinstance(payload, dict) and not items:
@@ -119,13 +117,17 @@ def upsert_fc_cache_from_payload(payload, *, tenant=None):
             "status": 1,
             "deleted_at": None,
         }
+        # The tenant is set only when GK first sees the record; a later write
+        # must never move an existing record to the writer's tenant.
+        create_defaults = dict(defaults)
         if tenant_id:
-            defaults["tenant_id"] = tenant_id
+            create_defaults["tenant_id"] = tenant_id
 
         FarmCalendarResourceCache.objects.update_or_create(
             resource_type=resource_type,
             resource_id=resource_id,
             defaults=defaults,
+            create_defaults=create_defaults,
         )
         upserted.append((resource_type, resource_id))
 
