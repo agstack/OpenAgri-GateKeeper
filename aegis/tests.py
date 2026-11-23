@@ -21,6 +21,7 @@ from aegis.models import (
     Tenant,
 )
 from aegis.services.entitlement_service import resolve_service_entitlements_for_user
+from aegis.services.fc_catalog_sync import upsert_fc_cache_from_payload
 from aegis.services.farm_provisioning import load_temporary_farm_profiles
 from aegis.services.upstream_security import UpstreamPolicyError, validate_allowed_upstream
 from aegis.views.api.service_registry_views import (
@@ -792,3 +793,229 @@ class ReadOnlyUserTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         request_mock.assert_called_once()
+
+
+FARM_A = "aaaaaaaa-0000-4000-8000-00000000000a"
+PARCEL_A = "aaaaaaaa-0000-4000-8000-00000000001a"
+FARM_B = "bbbbbbbb-0000-4000-8000-00000000000b"
+PARCEL_B = "bbbbbbbb-0000-4000-8000-00000000001b"
+ACTIVITY_B = "bbbbbbbb-0000-4000-8000-00000000002b"
+ACTIVITY_TYPE = "dddddddd-0000-4000-8000-00000000000d"
+
+
+def _fc_farm(farm_id, parcel_id, name="Farm"):
+    return {
+        "@id": f"urn:farmcalendar:Farm:{farm_id}",
+        "@type": "Farm",
+        "name": name,
+        "hasAgriParcel": [{"@id": f"urn:farmcalendar:Parcel:{parcel_id}", "@type": "Parcel"}],
+    }
+
+
+FC_RECORDS = {
+    FARM_A: _fc_farm(FARM_A, PARCEL_A, "Farm A"),
+    FARM_B: _fc_farm(FARM_B, PARCEL_B, "Farm B"),
+    ACTIVITY_B: {
+        "@id": f"urn:farmcalendar:FarmCalendarActivity:{ACTIVITY_B}",
+        "@type": "FarmCalendarActivity",
+        "title": "Harvest",
+        "hasAgriParcel": {"@id": f"urn:farmcalendar:Parcel:{PARCEL_B}", "@type": "Parcel"},
+    },
+    ACTIVITY_TYPE: {
+        "@id": f"urn:farmcalendar:FarmCalendarActivityType:{ACTIVITY_TYPE}",
+        "@type": "FarmCalendarActivityType",
+        "name": "Spraying",
+    },
+}
+
+
+def _json_response(status_code, payload):
+    response = Mock(status_code=status_code, headers={"Content-Type": "application/json"})
+    response.json.return_value = payload
+    response.iter_content.return_value = iter([b"{}"])
+    return response
+
+
+def _fc_get(url, **kwargs):
+    record = next((record for record_id, record in FC_RECORDS.items() if record_id in url), None)
+    return _json_response(200, record) if record else _json_response(404, {"detail": "Not found."})
+
+
+def _fc_write(method, url, **kwargs):
+    record = next((record for record_id, record in FC_RECORDS.items() if record_id in url), None)
+    if method == "DELETE":
+        response = Mock(status_code=204, headers={})
+        response.iter_content.return_value = iter([b""])
+        return response
+    return _json_response(200, record or {"@type": "Farm", "@id": "urn:farmcalendar:Farm:"
+                                          "eeeeeeee-0000-4000-8000-00000000000e", "name": "New farm"})
+
+
+@override_settings(
+    GATEKEEPER_ALLOWED_UPSTREAMS=("http://127.0.0.1:8002/",),
+    GATEKEEPER_ALLOW_PRIVATE_UPSTREAMS=True,
+    GATEKEEPER_ALLOW_HTTP_UPSTREAMS=True,
+)
+class FarmCalendarWriteScopeTests(TestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.tenant_a = Tenant.objects.create(code="farm-tenant-a", slug="farm-tenant-a", name="Farm Tenant A")
+        self.tenant_b = Tenant.objects.create(code="farm-tenant-b", slug="farm-tenant-b", name="Farm Tenant B")
+        fc_service, _ = ServiceMaster.objects.get_or_create(service_code="FC", defaults={"service_name": "Farm Calendar"})
+        for action in ("view", "add", "edit", "delete"):
+            PermissionMaster.objects.get_or_create(service=fc_service, action=action)
+
+        cache = FarmCalendarResourceCache.objects
+        cache.create(resource_type="farm", resource_id=FARM_A, farm_id=FARM_A, tenant=self.tenant_a)
+        cache.create(resource_type="parcel", resource_id=PARCEL_A, farm_id=FARM_A, tenant=self.tenant_a)
+        cache.create(resource_type="farm", resource_id=FARM_B, farm_id=FARM_B, tenant=self.tenant_b)
+        cache.create(resource_type="parcel", resource_id=PARCEL_B, farm_id=FARM_B, tenant=self.tenant_b)
+
+        self.tenant_admin = user_model.objects.create_user(
+            username="tenant-a-admin", email="tenant-a-admin@example.com", password="temporary-pass-123",
+            tenant=self.tenant_a, is_tenant_admin=True, is_staff=True,
+        )
+        self.editor = user_model.objects.create_user(
+            username="tenant-a-editor", email="tenant-a-editor@example.com", password="temporary-pass-123",
+            tenant=self.tenant_a,
+        )
+        ServiceScopeAssignment.objects.create(
+            tenant=self.tenant_a, service=fc_service, user=self.editor, role="editor",
+            actions=["view", "add", "edit", "delete"], scope_type="farm", scope_id=FARM_A,
+        )
+
+        for endpoint, methods in (
+            ("api/v1/Farm/", ["GET", "POST"]),
+            ("api/v1/Farm/{id}/", ["GET", "PATCH", "DELETE"]),
+            ("api/v1/FarmCalendarActivities/{id}/", ["GET", "PATCH", "DELETE"]),
+            ("api/v1/FarmCalendarActivityTypes/{id}/", ["GET", "PATCH", "DELETE"]),
+        ):
+            RegisteredService.objects.create(
+                base_url="http://127.0.0.1:8002/", service_name="farmcalendar", endpoint=endpoint, methods=methods,
+            )
+        self.client = APIClient()
+
+    def _send(self, user, method, path, body=None, raw_body=None):
+        self.client.force_authenticate(user)
+        url = reverse("new_reverse_proxy", kwargs={"path": f"farmcalendar/{path}"})
+        with patch("aegis.views.api.service_registry_views.requests.request", side_effect=_fc_write) as write_mock, \
+                patch("aegis.views.api.service_registry_views.requests.get", side_effect=_fc_get) as get_mock:
+            if raw_body is not None:
+                response = getattr(self.client, method)(url, data=raw_body, content_type="application/json")
+            elif body is not None:
+                response = getattr(self.client, method)(url, body, format="json")
+            else:
+                response = getattr(self.client, method)(url)
+        return response, write_mock, get_mock
+
+    def _farm_b_tenant(self):
+        return FarmCalendarResourceCache.objects.get(resource_type="farm", resource_id=FARM_B).tenant_id
+
+    def test_tenant_admin_cannot_edit_or_delete_another_tenants_farm(self):
+        patch_response, patch_write, _ = self._send(self.tenant_admin, "patch", f"api/v1/Farm/{FARM_B}/", {"name": "x"})
+        delete_response, delete_write, _ = self._send(self.tenant_admin, "delete", f"api/v1/Farm/{FARM_B}/")
+
+        self.assertEqual(patch_response.status_code, 403)
+        self.assertEqual(delete_response.status_code, 403)
+        patch_write.assert_not_called()
+        delete_write.assert_not_called()
+        self.assertEqual(self._farm_b_tenant(), self.tenant_b.id)
+
+    def test_tenant_admin_cannot_edit_another_tenants_activity(self):
+        response, write_mock, _ = self._send(
+            self.tenant_admin, "patch", f"api/v1/FarmCalendarActivities/{ACTIVITY_B}/", {"title": "x"}
+        )
+
+        self.assertEqual(response.status_code, 403)
+        write_mock.assert_not_called()
+
+    def test_editor_cannot_bypass_scope_with_a_body_without_farm_or_parcel(self):
+        patch_response, patch_write, _ = self._send(self.editor, "patch", f"api/v1/Farm/{FARM_B}/", {"name": "x"})
+        delete_response, delete_write, _ = self._send(self.editor, "delete", f"api/v1/Farm/{FARM_B}/", raw_body="{}")
+
+        self.assertEqual(patch_response.status_code, 403)
+        self.assertEqual(delete_response.status_code, 403)
+        patch_write.assert_not_called()
+        delete_write.assert_not_called()
+
+    def test_own_tenant_writes_still_work(self):
+        admin_patch, _, _ = self._send(self.tenant_admin, "patch", f"api/v1/Farm/{FARM_A}/", {"name": "x"})
+        editor_patch, _, _ = self._send(self.editor, "patch", f"api/v1/Farm/{FARM_A}/", {"name": "x"})
+        editor_delete, _, _ = self._send(self.editor, "delete", f"api/v1/Farm/{FARM_A}/")
+        admin_create, _, _ = self._send(self.tenant_admin, "post", "api/v1/Farm/", {"name": "New farm"})
+
+        self.assertEqual(
+            [admin_patch.status_code, editor_patch.status_code, editor_delete.status_code, admin_create.status_code],
+            [200, 200, 204, 200],
+        )
+
+    def test_record_without_farm_or_parcel_link_behaves_as_before(self):
+        response, write_mock, _ = self._send(
+            self.editor, "patch", f"api/v1/FarmCalendarActivityTypes/{ACTIVITY_TYPE}/", {"name": "x"}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        write_mock.assert_called_once()
+
+    def test_write_is_refused_when_existing_record_cannot_be_read(self):
+        missing = "ffffffff-0000-4000-8000-00000000000f"
+        response, write_mock, _ = self._send(self.editor, "patch", f"api/v1/Farm/{missing}/", {"name": "x"})
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json(), {"error": "The target record could not be verified."})
+        write_mock.assert_not_called()
+
+    def test_existing_record_is_read_as_json_whatever_the_query_string(self):
+        self.client.force_authenticate(self.editor)
+        url = reverse("new_reverse_proxy", kwargs={"path": f"farmcalendar/api/v1/Farm/{FARM_B}/"}) + "?format=api"
+        with patch("aegis.views.api.service_registry_views.requests.request", side_effect=_fc_write) as write_mock, \
+                patch("aegis.views.api.service_registry_views.requests.get", side_effect=_fc_get) as get_mock:
+            response = self.client.patch(url, {"name": "x"}, format="json")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(get_mock.call_args.kwargs["params"], {"format": "json"})
+        write_mock.assert_not_called()
+
+
+class FarmCalendarCacheStampingTests(TestCase):
+    def setUp(self):
+        self.tenant_a = Tenant.objects.create(code="stamp-tenant-a", slug="stamp-tenant-a", name="Stamp Tenant A")
+        self.tenant_b = Tenant.objects.create(code="stamp-tenant-b", slug="stamp-tenant-b", name="Stamp Tenant B")
+
+    def test_only_declared_farms_and_parcels_are_cached(self):
+        rows = upsert_fc_cache_from_payload(
+            {
+                "@graph": [
+                    FC_RECORDS[ACTIVITY_B],
+                    {
+                        "@id": "urn:farmcalendar:AgriculturalMachine:cccccccc-0000-4000-8000-00000000000c",
+                        "@type": "AgriculturalMachine",
+                        "hasAgriParcel": {"@id": f"urn:farmcalendar:Parcel:{PARCEL_A}"},
+                    },
+                    _fc_farm(FARM_A, PARCEL_A),
+                    {"@id": f"urn:farmcalendar:Parcel:{PARCEL_A}", "@type": "Parcel",
+                     "farm": {"@id": f"urn:farmcalendar:Farm:{FARM_A}", "@type": "Farm"}},
+                ]
+            },
+            tenant=self.tenant_a,
+        )
+
+        self.assertEqual(sorted(rows), [("farm", FARM_A), ("parcel", PARCEL_A)])
+        self.assertEqual(FarmCalendarResourceCache.objects.count(), 2)
+
+    def test_existing_record_keeps_its_tenant(self):
+        FarmCalendarResourceCache.objects.create(
+            resource_type="farm", resource_id=FARM_B, farm_id=FARM_B, tenant=self.tenant_b, name="Farm B"
+        )
+
+        upsert_fc_cache_from_payload(_fc_farm(FARM_B, PARCEL_B, "Renamed"), tenant=self.tenant_a)
+
+        row = FarmCalendarResourceCache.objects.get(resource_type="farm", resource_id=FARM_B)
+        self.assertEqual(row.tenant_id, self.tenant_b.id)
+        self.assertEqual(row.name, "Renamed")
+
+    def test_new_record_gets_the_writers_tenant(self):
+        upsert_fc_cache_from_payload(_fc_farm(FARM_A, PARCEL_A), tenant=self.tenant_a)
+
+        row = FarmCalendarResourceCache.objects.get(resource_type="farm", resource_id=FARM_A)
+        self.assertEqual(row.tenant_id, self.tenant_a.id)

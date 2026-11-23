@@ -223,24 +223,51 @@ def _fetch_upstream_json(upstream_url: str, headers: dict[str, str], params) -> 
         return None
 
 
+def _existing_record_targets(record: object) -> tuple[set[str], set[str]]:
+    """
+    Farm/parcel IDs that own an existing FC record. A farm or parcel is owned
+    by itself (its child parcels and crops are not being changed); any other
+    record by the farms/parcels it refers to.
+    """
+    if isinstance(record, dict):
+        record_type = _normalize_service_key(record.get("@type") or record.get("resource_type"))
+        record_id = _extract_uuidish(record.get("@id") or record.get("id"))
+        if record_id and record_type == "farm":
+            return {record_id}, set()
+        if record_id and record_type == "parcel":
+            return set(), {record_id}
+    return _collect_scope_targets(record)
+
+
 def _resolve_fc_write_targets(
     method: str,
     upstream_url: str,
     headers: dict[str, str],
-    params,
     raw_body: bytes,
     content_type: str,
-) -> tuple[set[str], set[str]]:
+) -> Optional[tuple[set[str], set[str]]]:
+    """
+    Farm/parcel IDs a write touches: everything the body refers to and, for
+    PUT/PATCH/DELETE, the owners of the existing record. Returns None when the
+    existing record cannot be read, so the caller can refuse the write.
+    """
+    farm_ids: set[str] = set()
+    parcel_ids: set[str] = set()
     body_data = _decode_json_body(raw_body, content_type)
     if body_data is not None:
-        return _collect_scope_targets(body_data)
+        farm_ids, parcel_ids = _collect_scope_targets(body_data)
 
     if method in {"PUT", "PATCH", "DELETE"}:
-        upstream_data = _fetch_upstream_json(upstream_url, headers, params)
-        if upstream_data is not None:
-            return _collect_scope_targets(upstream_data)
+        # Read the record as plain JSON, ignoring the caller's query string so it
+        # cannot switch the response to a format GK does not parse.
+        existing = _fetch_upstream_json(upstream_url, headers, {"format": "json"})
+        if existing is None:
+            return None
+        existing_farms, existing_parcels = _existing_record_targets(existing)
+        farm_ids |= existing_farms
+        parcel_ids |= existing_parcels
 
-    return set(), set()
+    return farm_ids, parcel_ids
 
 
 def _get_fc_entitlement(user):
@@ -1018,23 +1045,38 @@ class NewReverseProxyAPIView(APIView):
                         )
 
                     if method in {"POST", "PUT", "PATCH", "DELETE"}:
-                        target_farms, target_parcels = _resolve_fc_write_targets(
+                        write_targets = _resolve_fc_write_targets(
                             method=method,
                             upstream_url=upstream_url,
                             headers=forward_headers,
-                            params=request.GET,
                             raw_body=raw_body,
                             content_type=req_ct,
                         )
+                        if write_targets is None:
+                            LOG.warning(
+                                "GK PROXY DENY method=%s svc=%s path=%s user=%s reason=target_unverifiable corr=%s",
+                                method,
+                                service_entry.service_name,
+                                path,
+                                getattr(request.user, "username", "-"),
+                                corr_id,
+                            )
+                            return JsonResponse(
+                                {"error": "The target record could not be verified."},
+                                status=403,
+                            )
+                        target_farms, target_parcels = write_targets
                         parcel_to_farm = _parcel_to_farm_map()
                         farm_tenants, parcel_tenants = _resource_tenant_maps()
                         tenant_id = str(request.user.tenant_id) if getattr(request.user, "tenant_id", None) else None
                         # Bind the scope check to the required action: only scopes
                         # that grant THIS action count as allowed for this write.
+                        # Tenant admins are checked too; their scopes cover every
+                        # farm/parcel of their own tenant and nothing else.
                         action_farms, action_parcels = _scopes_with_action(
                             required_action, farm_actions, parcel_actions
                         )
-                        if not has_service_wide_action and not _targets_within_scope(
+                        if not _targets_within_scope(
                             target_farms,
                             target_parcels,
                             action_farms,
