@@ -1,7 +1,5 @@
 # gatekeeper/urls.py
 
-from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.auth import logout
 from django.db import connection
@@ -10,10 +8,10 @@ from django.urls import path, include, re_path
 
 from rest_framework_simplejwt.views import TokenRefreshView
 
-from aegis.views import LoginView, WhoAmIView
+from aegis.views import LoginView, RegisterView, WhoAmIView
 from aegis.views.home_view import HomeView
 from aegis.views.api.auth_views import (
-    LoginAPIView, LogoutAPIView, TokenValidationAPIView, MeAPIView, FarmCalendarScopeAPIView,
+    LoginAPIView, LogoutAPIView, RegisterAPIView, TokenValidationAPIView, MeAPIView, FarmCalendarScopeAPIView,
     FarmCalendarCatalogAPIView
 )
 from aegis.views.api.service_registry_views import (ServiceDirectoryAPIView, RegisterServiceAPIView,
@@ -46,14 +44,14 @@ urlpatterns = [
     path('admin/', admin.site.urls),
 
     path('login/', LoginView.as_view(), name='login'),
-    # path('register/', RegisterView.as_view(), name='register'),
+    path('register/', RegisterView.as_view(), name='register'),
 
     path('api/me/', MeAPIView.as_view(), name='api_me'),
     path('api/farmcalendar-scopes/', FarmCalendarScopeAPIView.as_view(), name='api_farmcalendar_scopes'),
     path('api/farmcalendar-catalog/', FarmCalendarCatalogAPIView.as_view(), name='api_farmcalendar_catalog'),
     path('api/login/', LoginAPIView.as_view(), name='api_login'),
     path('api/logout/', LogoutAPIView.as_view(), name='api_logout'),
-    # path('api/register/', RegisterAPIView.as_view(), name='api_register'),
+    path('api/register/', RegisterAPIView.as_view(), name='api_register'),
     path('api/validate_token/', TokenValidationAPIView.as_view(), name='validate_token'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
@@ -70,9 +68,5 @@ urlpatterns = [
 
     path("api/whoami/", WhoAmIView.as_view(), name="whoami"),
 ]
-
-if settings.DEBUG:
-    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 handler404 = custom_page_not_found_view

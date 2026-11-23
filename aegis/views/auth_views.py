@@ -2,8 +2,9 @@
 
 import requests
 
-# from django import forms
+from django.contrib import messages
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.http import HttpResponseRedirect
 from django.urls import reverse_lazy
 from django.utils.decorators import method_decorator
@@ -16,7 +17,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
 
-from aegis.forms import UserLoginForm
+from aegis.forms import UserLoginForm, UserRegistrationForm
+from aegis.services.auth_services import register_user
+from aegis.throttles import check_login_allowed, clear_login_failures, register_login_failure
 
 
 @method_decorator(never_cache, name='dispatch')
@@ -49,6 +52,11 @@ class LoginView(FormView):
             password = form.cleaned_data["password"]
             # service_name = form.cleaned_data["service_name"]
 
+            allowed, retry_after = check_login_allowed(request, identifier=username)
+            if not allowed:
+                form.add_error(None, f"Too many login attempts. Try again in {retry_after} seconds.")
+                return self.render_to_response(self.get_context_data(form=form))
+
             login_url = f"{settings.INTERNAL_GK_URL}api/login/"
 
             try:
@@ -64,6 +72,7 @@ class LoginView(FormView):
                 data = response.json()
                 access_token = data["access"]
                 refresh_token = data["refresh"]
+                clear_login_failures(request, identifier=username)
 
                 # Determine the redirect URL
                 if next_url == "FarmCalendar":
@@ -87,9 +96,52 @@ class LoginView(FormView):
                 return HttpResponseRedirect(redirect_url)
 
             else:
+                if response.status_code in {status.HTTP_400_BAD_REQUEST, status.HTTP_401_UNAUTHORIZED, status.HTTP_429_TOO_MANY_REQUESTS}:
+                    register_login_failure(request, identifier=username)
                 form.add_error(None, "Invalid credentials")
 
         return self.render_to_response(self.get_context_data(form=form))
+
+
+@method_decorator(never_cache, name='dispatch')
+class RegisterView(FormView):
+    template_name = "auth/register.html"
+    form_class = UserRegistrationForm
+    success_url = reverse_lazy("login")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["next"] = self.request.GET.get("next", "") or self.request.POST.get("next", "")
+        return context
+
+    def form_valid(self, form):
+        try:
+            registration = register_user(
+                username=form.cleaned_data["username"],
+                email=form.cleaned_data["email"],
+                password=form.cleaned_data["password"],
+                first_name=form.cleaned_data["first_name"],
+                last_name=form.cleaned_data["last_name"],
+            )
+        except ValidationError as exc:
+            form.add_error(None, "; ".join(exc.messages))
+            return self.form_invalid(form)
+
+        farm_provisioning = registration["farm_provisioning"]
+        if not farm_provisioning.get("success") and not farm_provisioning.get("skipped"):
+            messages.warning(
+                self.request,
+                "Your account was created, but the sample farm could not be created automatically.",
+            )
+
+        messages.success(
+            self.request,
+            "Registration complete. Your private temporary SIP has been created. Please sign in.",
+        )
+        next_url = self.request.POST.get("next", "")
+        if next_url:
+            return HttpResponseRedirect(f"{self.success_url}?{urlencode({'next': next_url})}")
+        return super().form_valid(form)
 
 
 class WhoAmIView(APIView):

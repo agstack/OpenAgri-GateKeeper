@@ -5,6 +5,7 @@ import uuid
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, AbstractUser
+from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
 from django.db import models
 from django.db.models import Q
@@ -62,6 +63,20 @@ class Tenant(BaseModel):
     def __str__(self):
         return f"{self.code} - {self.name}"
 
+    def soft_delete(self):
+        if self.status == 2 and str(self.code).startswith("deleted__"):
+            return
+        prefix = f"deleted__{self.id.hex[:12]}__"
+        code_budget = max(1, 32 - len(prefix))
+        slug_budget = max(1, 64 - len(prefix))
+        name_budget = max(1, 255 - len(prefix))
+        self.code = f"{prefix}{(self.code or '')[:code_budget]}"
+        self.slug = f"{prefix}{(self.slug or '')[:slug_budget]}"
+        self.name = f"{prefix}{(self.name or '')[:name_budget]}"
+        self.status = 2
+        self.deleted_at = timezone.now()
+        self.save()
+
 
 class RequestLog(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
@@ -102,6 +117,10 @@ class DefaultAuthUserExtend(AbstractUser, BaseModel):
         related_name='users',
     )
     is_tenant_admin = models.BooleanField(default=False)
+    is_read_only = models.BooleanField(
+        default=False,
+        help_text="Can view all data in their tenant but cannot add, edit or delete anything in any service.",
+    )
 
     history = HistoricalRecords(table_name="auth_user_extend_history")
 
@@ -112,6 +131,13 @@ class DefaultAuthUserExtend(AbstractUser, BaseModel):
 
     def __str__(self):
         return f"{self.email} {self.first_name}"
+
+    def clean(self):
+        super().clean()
+        if self.is_read_only and (self.is_superuser or self.is_staff or self.is_tenant_admin):
+            raise ValidationError(
+                "A read-only user cannot also be a platform admin, staff user or tenant admin."
+            )
 
     def _released_username(self):
         return f"deleted__{self.uuid.hex[:12]}__{self.username}"[:150]
@@ -327,6 +353,19 @@ class ServiceMaster(BaseModel):
     def __str__(self):
         return f"{self.service_name} ({self.service_code})"
 
+    def soft_delete(self):
+        if self.status == 2 and str(self.service_code).startswith("deleted__"):
+            return
+        code_prefix = f"deleted__{self.pk}__"
+        name_prefix = f"deleted__{self.pk}__"
+        code_budget = max(1, 50 - len(code_prefix))
+        name_budget = max(1, 100 - len(name_prefix))
+        self.service_code = f"{code_prefix}{(self.service_code or '')[:code_budget]}"
+        self.service_name = f"{name_prefix}{(self.service_name or '')[:name_budget]}"
+        self.status = 2
+        self.deleted_at = timezone.now()
+        self.save()
+
 
 class GroupServiceAccess(BaseModel):
     """
@@ -409,8 +448,8 @@ class ServiceScopeAssignment(BaseModel):
     )
     role = models.CharField(max_length=50, default="viewer")
     actions = models.JSONField(default=list, blank=True)
-    scope_type = models.CharField(max_length=20, choices=SCOPE_TYPE_CHOICES)
-    scope_id = models.UUIDField(db_index=True)
+    scope_type = models.CharField(max_length=20, choices=SCOPE_TYPE_CHOICES, blank=True, null=True)
+    scope_id = models.UUIDField(db_index=True, blank=True, null=True)
 
     class Meta:
         db_table = "service_scope_assignments"
