@@ -12,7 +12,7 @@ services:
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     ports:
-      - "3312:3306"
+      - "127.0.0.1:3312:3306"
     volumes:
       - oa_gk_volume:/var/lib/mysql
     networks:
@@ -34,7 +34,7 @@ services:
       PMA_USER: ${PMA_USER}
       PMA_PASSWORD: ${PMA_PASSWORD}
     ports:
-      - "8088:80"
+      - "127.0.0.1:8088:80"
     networks:
       - oa_network
     depends_on:
