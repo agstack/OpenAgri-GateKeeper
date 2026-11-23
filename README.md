@@ -199,4 +199,4 @@ Tenant admins cannot:
 
 # License
 
-This project is distributed with the EUPL 1.2v. See the `LICENSE` file for details.
+This project is distributed under the Apache License 2.0. See the `LICENSE` file for details.
